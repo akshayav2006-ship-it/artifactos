@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Optional AI coding-assistant files
+.agents/
+.claude/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+convex/_generated/ai/

@@ -66,11 +66,36 @@ function Workspace() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    if (!isLoaded || !clerkUser || isConvexAuthLoading || !isConvexAuthenticated) {
+    if (
+      !isLoaded ||
+      !clerkUser ||
+      isConvexAuthLoading ||
+      !isConvexAuthenticated
+    ) {
       return;
     }
 
-    void syncCurrentUser({}).catch((error: unknown) => {
+    const email =
+      clerkUser.primaryEmailAddress?.emailAddress ??
+      clerkUser.emailAddresses[0]?.emailAddress;
+
+    if (!email) {
+      setNotice("Your Clerk account does not have an email address.");
+      return;
+    }
+
+    const name =
+      clerkUser.fullName?.trim() ||
+      clerkUser.username?.trim() ||
+      email.split("@")[0];
+
+    void syncCurrentUser({
+      email,
+      name,
+      ...(clerkUser.imageUrl
+        ? { imageUrl: clerkUser.imageUrl }
+        : {}),
+    }).catch((error: unknown) => {
       setNotice(
         error instanceof Error
           ? error.message
@@ -79,7 +104,7 @@ function Workspace() {
     });
   }, [
     isLoaded,
-    clerkUser?.id,
+    clerkUser,
     isConvexAuthLoading,
     isConvexAuthenticated,
     syncCurrentUser,

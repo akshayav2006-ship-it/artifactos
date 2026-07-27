@@ -1,5 +1,5 @@
 import { Show, SignInButton, SignUpButton, UserButton, useUser } from "@clerk/react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { Id } from "../convex/_generated/dataModel";
@@ -40,8 +40,16 @@ function Landing() {
 
 function Workspace() {
   const { user: clerkUser, isLoaded } = useUser();
+  const {
+    isAuthenticated: isConvexAuthenticated,
+    isLoading: isConvexAuthLoading,
+  } = useConvexAuth();
+
   const syncCurrentUser = useMutation(api.users.syncCurrentUser);
-  const currentUser = useQuery(api.users.current);
+  const currentUser = useQuery(
+    api.users.current,
+    isConvexAuthenticated ? {} : "skip",
+  );
   const projects = useQuery(
     api.projects.listMine,
     currentUser ? { includeArchived: true } : "skip",
@@ -58,12 +66,24 @@ function Workspace() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    if (isLoaded && clerkUser) {
-      void syncCurrentUser({}).catch((error: unknown) => {
-        setNotice(error instanceof Error ? error.message : "Could not synchronise your account.");
-      });
+    if (!isLoaded || !clerkUser || isConvexAuthLoading || !isConvexAuthenticated) {
+      return;
     }
-  }, [isLoaded, clerkUser?.id, syncCurrentUser]);
+
+    void syncCurrentUser({}).catch((error: unknown) => {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Could not synchronise your account.",
+      );
+    });
+  }, [
+    isLoaded,
+    clerkUser?.id,
+    isConvexAuthLoading,
+    isConvexAuthenticated,
+    syncCurrentUser,
+  ]);
 
   useEffect(() => {
     if (!selectedProjectId && projects && projects.length > 0) {
@@ -81,7 +101,7 @@ function Workspace() {
     }
   }
 
-  if (!currentUser || projects === undefined) {
+  if (isConvexAuthLoading || !isConvexAuthenticated || !currentUser || projects === undefined) {
     return <div className="loading-screen"><div className="spinner" />Preparing your workspace…</div>;
   }
 

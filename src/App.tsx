@@ -42,8 +42,14 @@ function Workspace() {
   const { user: clerkUser, isLoaded } = useUser();
   const syncCurrentUser = useMutation(api.users.syncCurrentUser);
   const currentUser = useQuery(api.users.current);
-  const projects = useQuery(api.projects.listMine, { includeArchived: true });
-  const myInvitations = useQuery(api.team.listMyInvitations);
+  const projects = useQuery(
+    api.projects.listMine,
+    currentUser ? { includeArchived: true } : "skip",
+  );
+  const myInvitations = useQuery(
+    api.team.listMyInvitations,
+    currentUser ? {} : "skip",
+  );
   const acceptInvitation = useMutation(api.team.acceptInvitation);
   const rejectInvitation = useMutation(api.team.rejectInvitation);
 

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import './LoginPage.css'
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth()
-  const [email, setEmail] = useState('maya@artifactos.ai')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
@@ -26,21 +27,30 @@ export function LoginPage() {
 
   return (
     <div className="auth-page">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <p className="auth-tag">Artifactos</p>
-        <h2>Welcome back</h2>
-        <label>
-          Email
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>
-          Password
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </label>
-        <button type="submit" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
+      <div className="auth-shell">
+        <section className="auth-hero">
+          <span className="auth-badge">Artifactos</span>
+          <h1>Trusted AI work, organized in one space.</h1>
+          <p>Create projects, review artifacts, manage approvals, and keep your team aligned with a single intelligent workspace.</p>
+        </section>
+
+        <form className="auth-card" onSubmit={handleSubmit}>
+          <p className="eyebrow">Welcome back</p>
+          <h2>Sign in to continue</h2>
+          <label>
+            Email
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="your@email.com" required />
+          </label>
+          <label>
+            Password
+            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="any password" required />
+          </label>
+          <button type="submit" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+          <p className="auth-footer">Demo mode: Enter any email and password to continue</p>
+        </form>
+      </div>
     </div>
   )
 }

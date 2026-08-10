@@ -12,7 +12,7 @@ import {
 } from './mockData'
 import type { SearchResult } from './types'
 
-type TabKey = 'overview' | 'search' | 'assistant' | 'dashboard' | 'analytics' | 'graph' | 'notifications'
+type TabKey = 'overview' | 'activity' | 'notifications'
 
 type WorkspaceCommandCenterProps = {
   initialTab?: TabKey
@@ -20,11 +20,7 @@ type WorkspaceCommandCenterProps = {
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
-  { key: 'search', label: 'Search' },
-  { key: 'assistant', label: 'AI Assistant' },
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'analytics', label: 'Analytics' },
-  { key: 'graph', label: 'Knowledge Graph' },
+  { key: 'activity', label: 'Recent Activity' },
   { key: 'notifications', label: 'Notifications' },
 ]
 
@@ -38,6 +34,7 @@ function formatDate(date: string) {
 export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCommandCenterProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
   const [query, setQuery] = useState('Show all approved ChatGPT artifacts.')
+  const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setActiveTab(initialTab)
@@ -90,9 +87,40 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
     return result
   }, [projectFilter, query, sortBy, statusFilter, trustFilter, modelFilter])
 
-  const unreadCount = useMemo(
-    () => notifications.filter((item) => item.unread).length,
-    [],
+  const handleMarkAllRead = () => {
+    const allIds = new Set(notifications.map(n => n.id))
+    setReadNotifications(allIds)
+  }
+
+  const handleMarkRead = (id: string) => {
+    const updated = new Set(readNotifications)
+    updated.add(id)
+    setReadNotifications(updated)
+  }
+
+  const renderActivity = () => (
+    <div className="panel-stack">
+      <section className="panel-card">
+        <div className="section-header">
+          <div>
+            <p className="eyebrow">Activity Feed</p>
+            <h3>Recent workspace activity</h3>
+          </div>
+        </div>
+        <div className="feed-list">
+          {activityFeed.map((entry, index) => (
+            <div key={`${entry.title}-${index}`} className="feed-item">
+              <span className="dot" />
+              <div>
+                <strong>{entry.title}</strong>
+                <p>{entry.detail}</p>
+              </div>
+              <small>{entry.time}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   )
 
   const renderOverview = () => (
@@ -103,7 +131,6 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
             <p className="eyebrow">Command Center</p>
             <h3>Workspace overview</h3>
           </div>
-          <button type="button" className="primary-btn">Generate Report</button>
         </div>
         <div className="stats-grid">
           {dashboardStats.map((stat) => (
@@ -115,42 +142,11 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
           ))}
         </div>
       </section>
-
-      <section className="panel-card two-column">
-        <div>
-          <div className="section-header compact">
-            <h3>Recent activity</h3>
-          </div>
-          <div className="feed-list">
-            {activityFeed.map((entry) => (
-              <div key={`${entry.title}-${entry.time}`} className="feed-item">
-                <span className="dot" />
-                <div>
-                  <strong>{entry.title}</strong>
-                  <p>{entry.detail}</p>
-                </div>
-                <small>{entry.time}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="section-header compact">
-            <h3>Quick actions</h3>
-          </div>
-          <div className="quick-actions">
-            <button type="button" className="secondary-btn">New Chat</button>
-            <button type="button" className="secondary-btn">New Project</button>
-            <button type="button" className="secondary-btn">Search</button>
-            <button type="button" className="secondary-btn">Upload File</button>
-            <button type="button" className="secondary-btn">Generate Report</button>
-          </div>
-        </div>
-      </section>
     </div>
   )
 
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderSearch = () => (
     <div className="panel-stack">
       <section className="panel-card">
@@ -260,6 +256,8 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
     </div>
   )
 
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderAssistant = () => (
     <div className="panel-stack">
       <section className="panel-card two-column">
@@ -317,6 +315,8 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
     </div>
   )
 
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderDashboard = () => (
     <div className="panel-stack">
       <section className="panel-card">
@@ -363,6 +363,8 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
     </div>
   )
 
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderAnalytics = () => (
     <div className="panel-stack">
       <section className="panel-card">
@@ -405,6 +407,8 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
     </div>
   )
 
+  // @ts-ignore
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderGraph = () => (
     <div className="panel-stack">
       <section className="panel-card">
@@ -443,22 +447,32 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
             <h3>Workspace alerts</h3>
           </div>
           <div className="notification-actions">
-            <span className="badge-read">{unreadCount} unread</span>
-            <button type="button" className="secondary-btn">Mark All Read</button>
+            <span className="badge-read">{notifications.filter(n => !readNotifications.has(n.id) && n.unread).length} unread</span>
+            <button type="button" className="secondary-btn" onClick={handleMarkAllRead}>Mark All Read</button>
           </div>
         </div>
 
         <div className="notification-list">
-          {notifications.map((item) => (
-            <div key={item.id} className={`notification-item ${item.unread ? 'unread' : ''}`}>
-              <div className="notification-top">
-                <strong>{item.title}</strong>
-                <span>{item.time}</span>
+          {notifications
+            .filter(item => !readNotifications.has(item.id))
+            .map((item) => (
+              <div key={item.id} className="notification-item unread">
+                <div className="notification-content">
+                  <div className="notification-top">
+                    <strong>{item.title}</strong>
+                    <span>{item.time}</span>
+                  </div>
+                  <p>{item.message}</p>
+                </div>
+                <button 
+                  type="button" 
+                  className="mark-read-btn"
+                  onClick={() => handleMarkRead(item.id)}
+                >
+                  Mark read
+                </button>
               </div>
-              <p>{item.message}</p>
-              <button type="button">Mark read</button>
-            </div>
-          ))}
+            ))}
         </div>
       </section>
     </div>
@@ -466,16 +480,8 @@ export function WorkspaceCommandCenter({ initialTab = 'overview' }: WorkspaceCom
 
   const content = (() => {
     switch (activeTab) {
-      case 'search':
-        return renderSearch()
-      case 'assistant':
-        return renderAssistant()
-      case 'dashboard':
-        return renderDashboard()
-      case 'analytics':
-        return renderAnalytics()
-      case 'graph':
-        return renderGraph()
+      case 'activity':
+        return renderActivity()
       case 'notifications':
         return renderNotifications()
       default:

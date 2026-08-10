@@ -1,22 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useAppState } from '../state/AppContext'
+import { navItems } from '../routes/navigation'
 import './AppShell.css'
-
-const navItems = [
-  { label: 'Dashboard', to: '/dashboard' },
-  { label: 'Projects', to: '/projects' },
-  { label: 'AI Chat', to: '/chat' },
-  { label: 'Artifacts', to: '/artifacts' },
-  { label: 'Semantic Search', to: '/search' },
-  { label: 'AI Assistant', to: '/assistant' },
-  { label: 'Analytics', to: '/analytics' },
-  { label: 'Knowledge Graph', to: '/knowledge-graph' },
-  { label: 'Notifications', to: '/notifications' },
-  { label: 'Settings', to: '/settings' },
-  { label: 'Profile', to: '/profile' },
-  { label: 'Logout', to: '/login' },
-]
 
 type AppShellProps = {
   children: React.ReactNode

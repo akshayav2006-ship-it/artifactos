@@ -69,9 +69,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       )
       return
     } catch {
+      // Accept any email/password in demo mode - derive name from email
+      const nameParts = email.split('@')[0].split(/[._-]+/)
+      const displayName = nameParts
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ')
+
       const fallbackUser: AuthUser = {
-        id: 'user-1',
-        name: 'Maya Chen',
+        id: `user-${Math.random().toString(36).substr(2, 9)}`,
+        name: displayName || 'Demo User',
         email,
         role: 'Owner',
       }

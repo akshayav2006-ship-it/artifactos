@@ -8,10 +8,34 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding: 22px 24px;
   border-radius: 22px;
   background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
   border: 1px solid rgba(124, 58, 237, 0.12);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.add-project-btn {
+  white-space: nowrap;
+}
+
+.back-btn {
+  border: none;
+  background: transparent;
+  color: #6d28d9;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 0 6px;
+}
+
+.muted {
+  color: #6b7280;
 }
 
 .page-pill,
@@ -25,6 +49,13 @@
   color: #6d28d9;
   font-weight: 700;
   box-shadow: 0 6px 16px rgba(124, 58, 237, 0.12);
+}
+
+.pill.small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  box-shadow: none;
+  background: #f5f3ff;
 }
 
 .stats-row {
@@ -67,7 +98,9 @@
 .form-card input,
 .form-card textarea,
 .invite-form input,
-.invite-form select {
+.invite-form select,
+.invite-inline-form input,
+.invite-inline-form select {
   border: 1px solid #d1d5db;
   border-radius: 12px;
   padding: 10px 12px;
@@ -75,31 +108,41 @@
   background: #fcfcff;
 }
 
-.project-list {
+.invite-inline-form {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.project-chip {
-  display: flex;
-  justify-content: space-between;
+  gap: 8px;
   align-items: center;
-  padding: 12px 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #f9fafb;
+  flex-wrap: wrap;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid #eef0f4;
+  vertical-align: top;
+}
+
+.data-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.clickable-row {
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background 0.2s ease;
 }
 
-.project-chip:hover {
-  border-color: #c4b5fd;
-}
-
-.project-chip.active {
-  border-color: #8b5cf6;
-  background: #f5f3ff;
+.clickable-row:hover {
+  background: #faf9ff;
 }
 
 .detail-grid {
@@ -108,24 +151,99 @@
 
 .detail-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
-  margin-top: 14px;
 }
 
 .detail-meta > div {
   padding: 12px;
   border-radius: 12px;
   background: #f9fafb;
-}
-
-.member-list {
-  margin: 0;
-  padding-left: 18px;
+  border: 1px solid #eef0f4;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  color: #374151;
+  gap: 4px;
+}
+
+.detail-meta span {
+  color: #6b7280;
+  font-size: 0.85rem;
+}
+
+.collaborator-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.collaborator-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #eef0f4;
+  border-radius: 14px;
+  background: #fcfcff;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.collaborator-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.collaborator-info span {
+  font-size: 0.85rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.modal-card {
+  width: min(480px, 100%);
+  background: white;
+  border-radius: 20px;
+  padding: 22px;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 @media (max-width: 900px) {
@@ -133,5 +251,9 @@
   .detail-grid {
     grid-template-columns: 1fr;
   }
-}
 
+  .page-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

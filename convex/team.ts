@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireCurrentUser, requireMembership, requireRole } from "./lib/auth";
+import {
+  requireCurrentUser,
+  requireMembership,
+  requireRole,
+  verifiedInvitationEmail,
+} from "./lib/auth";
 
 const invitationRole = v.union(
   v.literal("admin"),
@@ -51,11 +56,13 @@ export const listProjectInvitations = query({
 export const listMyInvitations = query({
   args: {},
   handler: async (ctx) => {
-    const user = await requireCurrentUser(ctx);
+    await requireCurrentUser(ctx);
+    const email = await verifiedInvitationEmail(ctx);
+    if (!email) return [];
     const invitations = await ctx.db
       .query("invitations")
       .withIndex("by_email_and_status", (q) =>
-        q.eq("email", user.email).eq("status", "pending"),
+        q.eq("email", email).eq("status", "pending"),
       )
       .order("desc")
       .take(100);
@@ -82,22 +89,8 @@ export const inviteMember = mutation({
 
     const email = args.email.trim().toLowerCase();
     if (!email.includes("@")) throw new Error("Enter a valid email address.");
-    if (email === inviter.email) throw new Error("You are already in this project.");
-
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .unique();
-
-    if (existingUser) {
-      const existingMembership = await ctx.db
-        .query("projectMembers")
-        .withIndex("by_project_id_and_user_id", (q) =>
-          q.eq("projectId", args.projectId).eq("userId", existingUser._id),
-        )
-        .unique();
-      if (existingMembership) throw new Error("This user is already a project member.");
-    }
+    if (email === inviter.email)
+      throw new Error("You are already in this project.");
 
     const previousInvitation = await ctx.db
       .query("invitations")
@@ -107,7 +100,10 @@ export const inviteMember = mutation({
       .order("desc")
       .first();
 
-    if (previousInvitation?.status === "pending" && previousInvitation.expiresAt > Date.now()) {
+    if (
+      previousInvitation?.status === "pending" &&
+      previousInvitation.expiresAt > Date.now()
+    ) {
       throw new Error("A pending invitation already exists for this email.");
     }
 
@@ -128,11 +124,19 @@ export const acceptInvitation = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
     const user = await requireCurrentUser(ctx);
+    const email = await verifiedInvitationEmail(ctx);
+    if (!email)
+      throw new Error(
+        "Your email must be verified by the sign-in provider before accepting an invitation.",
+      );
     const invitation = await ctx.db.get(args.invitationId);
     if (!invitation) throw new Error("Invitation not found.");
-    if (invitation.email !== user.email) throw new Error("This invitation belongs to another email.");
-    if (invitation.status !== "pending") throw new Error("This invitation is no longer pending.");
-    if (invitation.expiresAt < Date.now()) throw new Error("This invitation has expired.");
+    if (invitation.email !== email)
+      throw new Error("This invitation belongs to another email.");
+    if (invitation.status !== "pending")
+      throw new Error("This invitation is no longer pending.");
+    if (invitation.expiresAt < Date.now())
+      throw new Error("This invitation has expired.");
 
     const existingMembership = await ctx.db
       .query("projectMembers")
@@ -160,11 +164,17 @@ export const acceptInvitation = mutation({
 export const rejectInvitation = mutation({
   args: { invitationId: v.id("invitations") },
   handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
+    await requireCurrentUser(ctx);
+    const email = await verifiedInvitationEmail(ctx);
     const invitation = await ctx.db.get(args.invitationId);
-    if (!invitation || invitation.email !== user.email) throw new Error("Invitation not found.");
-    if (invitation.status !== "pending") throw new Error("Invitation is not pending.");
-    await ctx.db.patch(invitation._id, { status: "rejected", respondedAt: Date.now() });
+    if (!invitation || invitation.email !== email)
+      throw new Error("Invitation not found.");
+    if (invitation.status !== "pending")
+      throw new Error("Invitation is not pending.");
+    await ctx.db.patch(invitation._id, {
+      status: "rejected",
+      respondedAt: Date.now(),
+    });
   },
 });
 
@@ -174,8 +184,12 @@ export const revokeInvitation = mutation({
     const invitation = await ctx.db.get(args.invitationId);
     if (!invitation) throw new Error("Invitation not found.");
     await requireRole(ctx, invitation.projectId, ["owner", "admin"]);
-    if (invitation.status !== "pending") throw new Error("Only pending invitations can be revoked.");
-    await ctx.db.patch(invitation._id, { status: "revoked", respondedAt: Date.now() });
+    if (invitation.status !== "pending")
+      throw new Error("Only pending invitations can be revoked.");
+    await ctx.db.patch(invitation._id, {
+      status: "revoked",
+      respondedAt: Date.now(),
+    });
   },
 });
 
@@ -188,11 +202,19 @@ export const updateMemberRole = mutation({
     const actor = await requireCurrentUser(ctx);
     const target = await ctx.db.get(args.membershipId);
     if (!target) throw new Error("Member not found.");
-    const actorMembership = await requireRole(ctx, target.projectId, ["owner", "admin"]);
+    const actorMembership = await requireRole(ctx, target.projectId, [
+      "owner",
+      "admin",
+    ]);
 
-    if (target.role === "owner") throw new Error("The project owner role cannot be changed.");
-    if (target.userId === actor._id) throw new Error("You cannot change your own role.");
-    if (actorMembership.role === "admin" && (target.role === "admin" || args.role === "admin")) {
+    if (target.role === "owner")
+      throw new Error("The project owner role cannot be changed.");
+    if (target.userId === actor._id)
+      throw new Error("You cannot change your own role.");
+    if (
+      actorMembership.role === "admin" &&
+      (target.role === "admin" || args.role === "admin")
+    ) {
       throw new Error("Only the owner can manage administrators.");
     }
 
@@ -206,10 +228,15 @@ export const removeMember = mutation({
     const actor = await requireCurrentUser(ctx);
     const target = await ctx.db.get(args.membershipId);
     if (!target) throw new Error("Member not found.");
-    const actorMembership = await requireRole(ctx, target.projectId, ["owner", "admin"]);
+    const actorMembership = await requireRole(ctx, target.projectId, [
+      "owner",
+      "admin",
+    ]);
 
-    if (target.role === "owner") throw new Error("The project owner cannot be removed.");
-    if (target.userId === actor._id) throw new Error("Use Leave project to remove yourself.");
+    if (target.role === "owner")
+      throw new Error("The project owner cannot be removed.");
+    if (target.userId === actor._id)
+      throw new Error("Use Leave project to remove yourself.");
     if (actorMembership.role === "admin" && target.role === "admin") {
       throw new Error("Only the owner can remove another administrator.");
     }
@@ -222,7 +249,8 @@ export const leaveProject = mutation({
   args: { projectId: v.id("projects") },
   handler: async (ctx, args) => {
     const membership = await requireMembership(ctx, args.projectId);
-    if (membership.role === "owner") throw new Error("The owner cannot leave the project.");
+    if (membership.role === "owner")
+      throw new Error("The owner cannot leave the project.");
     await ctx.db.delete(membership._id);
   },
 });

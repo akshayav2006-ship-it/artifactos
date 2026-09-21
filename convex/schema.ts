@@ -1,6 +1,13 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+import {
+  chatFields,
+  promptFields,
+  commitFields,
+  artifactFields,
+} from "./workspaceValidators";
+
 const projectRole = v.union(
   v.literal("owner"),
   v.literal("admin"),
@@ -16,6 +23,18 @@ const subscriptionPlan = v.union(
 );
 
 export default defineSchema({
+  workChats: defineTable(chatFields)
+    .index("by_authorId_and_projectId", ["authorId", "projectId"])
+    .index("by_projectId", ["projectId"]),
+  workPrompts: defineTable(promptFields)
+    .index("by_chatId", ["chatId"])
+    .index("by_projectId", ["projectId"])
+    .index("by_authorId_and_projectId", ["authorId", "projectId"]),
+  workCommits: defineTable(commitFields).index("by_chatId", ["chatId"]),
+  workArtifacts: defineTable(artifactFields)
+    .index("by_projectId", ["projectId"])
+    .index("by_commitId", ["commitId"])
+    .index("by_promptId_and_reviewedAt", ["promptId", "reviewedAt"]),
   users: defineTable({
     clerkId: v.string(),
     email: v.string(),
@@ -70,6 +89,14 @@ export default defineSchema({
     expiresAt: v.number(),
     createdAt: v.number(),
     respondedAt: v.optional(v.number()),
+    delivery: v.optional(
+      v.union(
+        v.literal("queued"),
+        v.literal("sent"),
+        v.literal("failed"),
+        v.literal("not_configured"),
+      ),
+    ),
   })
     .index("by_project_id", ["projectId"])
     .index("by_email", ["email"])

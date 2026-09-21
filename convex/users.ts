@@ -9,6 +9,7 @@ export const syncCurrentUser = mutation({
     imageUrl: v.optional(v.string()),
   },
 
+  returns: v.id("users"),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
 
@@ -16,19 +17,19 @@ export const syncCurrentUser = mutation({
       throw new Error("You must be signed in.");
     }
 
-    const email = args.email.trim().toLowerCase();
+    // This email is profile/display data. Email-addressed authorization uses
+    // verified claims directly in the invitation handlers, never this field.
+    const email = (identity.email || args.email).trim().toLowerCase();
     const name = args.name.trim() || email.split("@")[0];
     const now = Date.now();
 
-    if (!email.includes("@")) {
+    if (email && !email.includes("@")) {
       throw new Error("A valid email address is required.");
     }
 
     const existing = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) =>
-        q.eq("clerkId", identity.subject),
-      )
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
       .unique();
 
     if (existing) {
@@ -56,6 +57,25 @@ export const syncCurrentUser = mutation({
 
 export const current = query({
   args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("users"),
+      _creationTime: v.number(),
+      clerkId: v.string(),
+      email: v.string(),
+      name: v.string(),
+      imageUrl: v.optional(v.string()),
+      bio: v.optional(v.string()),
+      plan: v.union(
+        v.literal("free"),
+        v.literal("pro"),
+        v.literal("enterprise"),
+      ),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  ),
 
   handler: async (ctx) => {
     return await getCurrentUser(ctx);
@@ -63,6 +83,7 @@ export const current = query({
 });
 
 export const updateProfile = mutation({
+  returns: v.null(),
   args: {
     name: v.string(),
     bio: v.string(),
@@ -74,9 +95,7 @@ export const updateProfile = mutation({
     const bio = args.bio.trim();
 
     if (name.length < 2 || name.length > 80) {
-      throw new Error(
-        "Name must contain between 2 and 80 characters.",
-      );
+      throw new Error("Name must contain between 2 and 80 characters.");
     }
 
     if (bio.length > 300) {
@@ -88,5 +107,6 @@ export const updateProfile = mutation({
       bio,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });

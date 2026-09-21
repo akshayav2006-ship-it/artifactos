@@ -1,0 +1,220 @@
+import type { Actions, Data } from "../../shared/workspace";
+import { emptyData } from "../../shared/workspace";
+export const storageKey = "artifactos-workspace-v2";
+export function loadLocal(): Data {
+  const raw = localStorage.getItem(storageKey);
+  if (raw) {
+    const parsed = JSON.parse(raw);
+    if (!Object.keys(emptyData).every((k) => Array.isArray(parsed[k])))
+      throw new Error(
+        "Saved workspace format could not be read. Your data has not been overwritten.",
+      );
+    return parsed;
+  }
+  const old = JSON.parse(
+    localStorage.getItem("artifactos-workspace-v1") || "null",
+  );
+  const data: Data = structuredClone(emptyData);
+  if (!old?.entries) return data;
+  for (const e of old.entries) {
+    if (e.kind === "Projects")
+      data.projects.push({
+        id: e.id,
+        name: e.title,
+        description: e.body,
+        role: "owner",
+        ownerId: "local",
+      });
+    if (
+      e.kind === "Conversations" ||
+      e.kind === "Prompt history" ||
+      e.kind === "Artifacts"
+    ) {
+      const now = Date.parse(e.date) || Date.now();
+      const chatId = `import-${e.id}`;
+      data.chats.push({
+        id: chatId,
+        title: e.title,
+        projectId: e.project,
+        authorId: "local",
+        author: "You",
+        createdAt: now,
+      });
+      data.prompts.push({
+        id: e.id,
+        chatId,
+        projectId: e.project,
+        authorId: "local",
+        author: "You",
+        text: e.kind === "Artifacts" ? e.title : e.body,
+        result: e.kind === "Artifacts" ? e.body : "",
+        status: "saved",
+        createdAt: now,
+      });
+      if (e.kind === "Artifacts") {
+        const versions = e.versions?.length
+          ? e.versions
+          : [{ body: e.body, date: e.date }];
+        versions.forEach((v: { body: string; date: string }, i: number) =>
+          data.commits.push({
+            id: `${e.id}-v${i}`,
+            chatId,
+            promptId: e.id,
+            projectId: e.project,
+            authorId: "local",
+            author: "You",
+            title: e.title,
+            body: v.body,
+            message: "Imported saved version",
+            createdAt: Date.parse(v.date) || now,
+          }),
+        );
+      }
+    }
+  }
+  return data;
+}
+export function localActions(
+  get: () => Data,
+  persist: (data: Data) => void,
+): Actions {
+  const id = () => crypto.randomUUID();
+  const update = (change: (data: Data) => void) => {
+    const data = structuredClone(get());
+    change(data);
+    persist(data);
+  };
+  return {
+    async createProject(name, description) {
+      name = name.trim();
+      if (name.length < 2 || name.length > 100 || description.length > 500)
+        throw new Error(
+          "Enter a project name of 2–100 characters and a description of up to 500 characters.",
+        );
+      const projectId = id();
+      update((d) => {
+        d.projects.unshift({
+          id: projectId,
+          name,
+          description,
+          role: "owner",
+          ownerId: "local",
+        });
+        d.members.push({
+          id: "local",
+          projectId,
+          name: "You",
+          email: "",
+          role: "owner",
+        });
+      });
+      return projectId;
+    },
+    async createChat(projectId, title) {
+      const chatId = id();
+      update((d) => {
+        d.chats.unshift({
+          id: chatId,
+          projectId,
+          title,
+          authorId: "local",
+          author: "You",
+          createdAt: Date.now(),
+        });
+      });
+      return chatId;
+    },
+    async assignChat(chatId, projectId) {
+      update((d) => {
+        const chat = d.chats.find((c) => c.id === chatId);
+        if (!chat) throw new Error("Chat not found.");
+        if (d.commits.some((c) => c.chatId === chatId))
+          throw new Error(
+            "Project is locked after the first commit. Start a new chat for another project.",
+          );
+        chat.projectId = projectId;
+        d.prompts
+          .filter((p) => p.chatId === chatId)
+          .forEach((p) => {
+            p.projectId = projectId;
+          });
+      });
+    },
+    async sendPrompt(chatId, text) {
+      update((d) => {
+        const chat = d.chats.find((c) => c.id === chatId);
+        if (!chat) throw new Error("Chat not found.");
+        d.prompts.push({
+          id: id(),
+          chatId,
+          projectId: chat.projectId,
+          authorId: "local",
+          author: "You",
+          text,
+          result: "",
+          status: "saved",
+          createdAt: Date.now(),
+        });
+      });
+    },
+    async addResult(promptId, result) {
+      update((d) => {
+        const p = d.prompts.find((p) => p.id === promptId);
+        if (!p) throw new Error("Prompt not found.");
+        p.result = result;
+        p.status = "complete";
+      });
+    },
+    async commit(chatId, promptId, title, body, message) {
+      update((d) => {
+        const chat = d.chats.find((c) => c.id === chatId);
+        if (!chat) throw new Error("Chat not found.");
+        if (!chat.projectId)
+          throw new Error("Choose a project before committing an artifact.");
+        if (!d.prompts.some((p) => p.id === promptId && p.chatId === chatId))
+          throw new Error("Source prompt does not belong to this chat.");
+        d.commits.unshift({
+          id: id(),
+          chatId,
+          projectId: chat.projectId,
+          promptId,
+          title,
+          body,
+          message,
+          author: "You",
+          authorId: "local",
+          createdAt: Date.now(),
+        });
+      });
+    },
+    async push(commitId) {
+      update((d) => {
+        const c = d.commits.find((c) => c.id === commitId);
+        if (!c?.projectId)
+          throw new Error("Choose a project before committing and pushing.");
+        if (d.artifacts.some((a) => a.commitId === commitId))
+          throw new Error("This commit has already been pushed.");
+        d.artifacts.unshift({
+          ...c,
+          id: id(),
+          commitId,
+          createdAt: Date.now(),
+          status: "pending",
+        });
+      });
+    },
+    async review() {
+      throw new Error(
+        "Sign in to a shared workspace to verify another contributor’s artifact. Local submissions cannot be self-verified.",
+      );
+    },
+    async invite() {
+      throw new Error(
+        "Sign in to invite collaborators by email. Local workspaces stay on this device.",
+      );
+    },
+    async accept() {
+      throw new Error("Sign in to accept a project invitation.");
+    },
+  };
+}

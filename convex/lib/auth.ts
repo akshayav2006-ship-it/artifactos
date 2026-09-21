@@ -3,14 +3,11 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 type AppCtx = QueryCtx | MutationCtx;
 
-export type ProjectRole =
-  | "owner"
-  | "admin"
-  | "member"
-  | "reviewer"
-  | "viewer";
+export type ProjectRole = "owner" | "admin" | "member" | "reviewer" | "viewer";
 
-export async function getCurrentUser(ctx: AppCtx): Promise<Doc<"users"> | null> {
+export async function getCurrentUser(
+  ctx: AppCtx,
+): Promise<Doc<"users"> | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
 
@@ -23,7 +20,9 @@ export async function getCurrentUser(ctx: AppCtx): Promise<Doc<"users"> | null> 
 export async function requireCurrentUser(ctx: AppCtx): Promise<Doc<"users">> {
   const user = await getCurrentUser(ctx);
   if (!user) {
-    throw new Error("You must be signed in and your profile must be synchronised.");
+    throw new Error(
+      "You must be signed in and your profile must be synchronised.",
+    );
   }
   return user;
 }
@@ -54,4 +53,14 @@ export async function requireRole(
     throw new Error("You do not have permission to perform this action.");
   }
   return membership;
+}
+
+/** Only signed, verified email claims can authorize an email invitation. */
+export async function verifiedInvitationEmail(
+  ctx: AppCtx,
+): Promise<string | null> {
+  const identity = await ctx.auth.getUserIdentity();
+  return identity?.email && identity.emailVerified === true
+    ? identity.email.trim().toLowerCase()
+    : null;
 }

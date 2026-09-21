@@ -9,11 +9,15 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as email from "../email.js";
+import type * as gmail from "../gmail.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as projects from "../projects.js";
 import type * as subscriptions from "../subscriptions.js";
 import type * as team from "../team.js";
 import type * as users from "../users.js";
+import type * as workspace from "../workspace.js";
+import type * as workspaceValidators from "../workspaceValidators.js";
 
 import type {
   ApiFromModules,
@@ -23,11 +27,15 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  email: typeof email;
+  gmail: typeof gmail;
   "lib/auth": typeof lib_auth;
   projects: typeof projects;
   subscriptions: typeof subscriptions;
   team: typeof team;
   users: typeof users;
+  workspace: typeof workspace;
+  workspaceValidators: typeof workspaceValidators;
 }>;
 
 /**
@@ -56,4 +64,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  agent: import("@convex-dev/agent/_generated/component.js").ComponentApi<"agent">;
+};

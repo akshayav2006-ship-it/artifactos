@@ -1,0 +1,389 @@
+import { Component, useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import {
+  ClerkProvider,
+  SignInButton,
+  UserButton,
+  useAuth,
+  useUser,
+} from "@clerk/react";
+import {
+  ConvexReactClient,
+  useAction,
+  useConvexAuth,
+  useMutation,
+  usePaginatedQuery,
+  useQuery,
+} from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import type { Actions, Data, Route } from "../../shared/workspace";
+import { emptyData } from "../../shared/workspace";
+import { loadLocal, localActions, storageKey } from "./local";
+import Workspace from "./Workspace";
+
+const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const url = import.meta.env.VITE_CONVEX_URL;
+const client = url ? new ConvexReactClient(url) : null;
+export default function Session() {
+  const [route, setRoute] = useState<Route>({ page: "Overview" });
+  const [cloud, setCloud] = useState(false);
+  const localAccount = (
+    <button
+      className="account-control"
+      onClick={() => {
+        setRoute({ page: "Overview" });
+        setCloud(true);
+      }}
+    >
+      <span className="account-avatar">Y</span>
+      <span>
+        You<small>Local workspace · Sign in to collaborate</small>
+      </span>
+      <span>↗</span>
+    </button>
+  );
+  if (!cloud)
+    return <Local route={route} setRoute={setRoute} account={localAccount} />;
+  if (!key || !client)
+    return (
+      <div className="session-message">
+        <h2>Sign-in is not configured</h2>
+        <p>The local workspace is still available.</p>
+        <button onClick={() => setCloud(false)}>Back to workspace</button>
+      </div>
+    );
+  return (
+    <Boundary>
+      <ClerkProvider publishableKey={key}>
+        <ConvexProviderWithClerk client={client} useAuth={useAuth}>
+          <Connected
+            route={route}
+            setRoute={setRoute}
+            leave={() => {
+              setRoute({ page: "Overview" });
+              setCloud(false);
+            }}
+          />
+        </ConvexProviderWithClerk>
+      </ClerkProvider>
+    </Boundary>
+  );
+}
+function Local({
+  route,
+  setRoute,
+  account,
+}: {
+  route: Route;
+  setRoute: (r: Route) => void;
+  account: ReactNode;
+}) {
+  const [initial] = useState(() => {
+    try {
+      return { data: loadLocal(), error: "" };
+    } catch (e) {
+      return { data: structuredClone(emptyData), error: String(e) };
+    }
+  });
+  const [data, setData] = useState<Data>(initial.data);
+  const [controller] = useState(() => {
+    let latest = initial.data;
+    return {
+      get: () => latest,
+      persist: (next: Data) => {
+        if (initial.error) throw new Error(initial.error);
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        latest = next;
+        setData(next);
+      },
+    };
+  });
+  const actions = localActions(controller.get, controller.persist);
+  return (
+    <Workspace
+      data={data}
+      actions={actions}
+      route={route}
+      setRoute={setRoute}
+      account={account}
+      userId="local"
+      local
+      error={initial.error}
+    />
+  );
+}
+function Connected({
+  route,
+  setRoute,
+  leave,
+}: {
+  route: Route;
+  setRoute: (r: Route) => void;
+  leave: () => void;
+}) {
+  const { user, isLoaded } = useUser();
+  const { isAuthenticated, isLoading } = useConvexAuth();
+  const sync = useMutation(api.users.syncCurrentUser);
+  const me = useQuery(api.users.current, isAuthenticated ? {} : "skip");
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    void sync({
+      name: user.fullName || user.username || "Contributor",
+      email: user.primaryEmailAddress?.emailAddress || "",
+    })
+      .then(() => setError(""))
+      .catch(() =>
+        setError(
+          "We couldn’t finish connecting your workspace. Please try again.",
+        ),
+      );
+  }, [isAuthenticated, user, sync, attempt]);
+  if (!isLoaded || isLoading)
+    return (
+      <div className="session-message">
+        <p>Connecting your workspace…</p>
+        <button onClick={leave}>Return to local workspace</button>
+      </div>
+    );
+  if (!user)
+    return (
+      <div className="session-message">
+        <span className="chat-mark">✳</span>
+        <h1>Your team’s work, together.</h1>
+        <p>
+          Sign in to collaborate, invite teammates, and review project
+          artifacts.
+        </p>
+        <SignInButton mode="modal">
+          <button className="primary">Sign in</button>
+        </SignInButton>
+        <button className="subtle" onClick={leave}>
+          Continue locally
+        </button>
+      </div>
+    );
+  if (error || !me)
+    return (
+      <div className="session-message">
+        <h2>
+          {error ? "Could not connect your account" : "Preparing your account…"}
+        </h2>
+        <p>{error || "Verifying your project access."}</p>
+        {error && (
+          <button
+            className="primary"
+            onClick={() => {
+              setError("");
+              setAttempt((value) => value + 1);
+            }}
+          >
+            Try again
+          </button>
+        )}
+        <UserButton />
+        <button className="subtle" onClick={leave}>
+          Return to local workspace
+        </button>
+      </div>
+    );
+  return (
+    <Remote
+      route={route}
+      setRoute={setRoute}
+      userId={me._id}
+      account={
+        <div className="cloud-account">
+          <UserButton showName />
+          <button className="subtle" onClick={leave}>
+            Local workspace
+          </button>
+        </div>
+      }
+    />
+  );
+}
+function Remote({
+  route,
+  setRoute,
+  userId,
+  account,
+}: {
+  route: Route;
+  setRoute: (r: Route) => void;
+  userId: string;
+  account: ReactNode;
+}) {
+  const [openedAt] = useState(() => Date.now());
+  const projectId = route.projectId as Id<"projects"> | undefined;
+  const chatId = route.chatId as Id<"workChats"> | undefined;
+  const projects = useQuery(api.projects.listMine, { includeArchived: false });
+  const chats = useQuery(api.workspace.chats, {
+    projectId,
+    chatId,
+  });
+  const promptPages = usePaginatedQuery(
+    api.workspace.listPrompts,
+    { projectId, chatId },
+    { initialNumItems: 30 },
+  );
+  const artifactPages = usePaginatedQuery(
+    api.workspace.listArtifacts,
+    projectId ? { projectId } : "skip",
+    { initialNumItems: 30 },
+  );
+  const commitPages = usePaginatedQuery(
+    api.workspace.listCommits,
+    chatId ? { chatId } : "skip",
+    { initialNumItems: 30 },
+  );
+  const pages = [promptPages, artifactPages, commitPages];
+  const more = pages.some((p) => p.status === "CanLoadMore");
+  const loadMore = () => {
+    pages.forEach((p) => {
+      if (p.status === "CanLoadMore") p.loadMore(30);
+    });
+  };
+  const active = projects?.find((p) => p._id === projectId);
+  const members = useQuery(
+    api.team.listMembers,
+    projectId ? { projectId } : "skip",
+  );
+  const invites = useQuery(
+    api.team.listProjectInvitations,
+    projectId && ["owner", "admin"].includes(active?.role || "")
+      ? { projectId }
+      : "skip",
+  );
+  const incoming = useQuery(api.team.listMyInvitations, {});
+  const createProject = useMutation(api.projects.create);
+  const createChat = useMutation(api.workspace.createChat);
+  const assign = useMutation(api.workspace.assignChat);
+  const send = useMutation(api.workspace.sendPrompt);
+  const result = useMutation(api.workspace.addResult);
+  const commit = useMutation(api.workspace.commit);
+  const push = useMutation(api.workspace.push);
+  const review = useMutation(api.workspace.review);
+  const invite = useAction(api.email.invite);
+  const accept = useMutation(api.team.acceptInvitation);
+  const actions: Actions = {
+    createProject: (name, description) => createProject({ name, description }),
+    createChat: (projectId, title) =>
+      createChat({
+        projectId: projectId ? (projectId as Id<"projects">) : undefined,
+        title,
+      }),
+    assignChat: async (chatId, projectId) => {
+      await assign({
+        chatId: chatId as Id<"workChats">,
+        projectId: projectId ? (projectId as Id<"projects">) : undefined,
+      });
+    },
+    sendPrompt: async (chatId, text) => {
+      await send({ chatId: chatId as Id<"workChats">, text });
+    },
+    addResult: async (promptId, value) => {
+      await result({ promptId: promptId as Id<"workPrompts">, result: value });
+    },
+    commit: async (chatId, promptId, title, body, message) => {
+      await commit({
+        chatId: chatId as Id<"workChats">,
+        promptId: promptId as Id<"workPrompts">,
+        title,
+        body,
+        message,
+      });
+    },
+    push: async (commitId) => {
+      await push({ commitId: commitId as Id<"workCommits"> });
+    },
+    review: async (artifactId, decision, score, feedback) => {
+      await review({
+        artifactId: artifactId as Id<"workArtifacts">,
+        decision,
+        score,
+        feedback,
+      });
+    },
+    invite: (projectId, email, role) =>
+      invite({ projectId: projectId as Id<"projects">, email, role }),
+    accept: async (invitationId) => {
+      await accept({ invitationId: invitationId as Id<"invitations"> });
+    },
+  };
+  const data: Data = {
+    projects: (projects || []).map((p) => ({
+      id: p._id,
+      name: p.name,
+      description: p.description,
+      role: p.role,
+      ownerId: p.ownerId,
+    })),
+    chats: chats || [],
+    prompts: promptPages.results,
+    commits: commitPages.results,
+    artifacts: artifactPages.results,
+    members: (members || []).map((m) => ({
+      id: m.userId,
+      projectId: projectId!,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+    })),
+    invites: (invites || []).map((i) => ({
+      id: i._id,
+      projectId: i.projectId,
+      projectName: active?.name || "",
+      email: i.email,
+      role: i.role,
+      status: i.status,
+      delivery: i.delivery,
+    })),
+    incoming: (incoming || [])
+      .filter((i) => i.expiresAt > openedAt)
+      .map((i) => ({
+        id: i._id,
+        projectId: i.projectId,
+        projectName: i.projectName,
+        email: i.email,
+        role: i.role,
+        status: i.status,
+      })),
+  };
+  return (
+    <Workspace
+      data={data}
+      actions={actions}
+      route={route}
+      setRoute={setRoute}
+      account={account}
+      userId={userId}
+      local={false}
+      loading={!projects || !chats}
+      more={more}
+      loadMore={loadMore}
+    />
+  );
+}
+class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <div className="session-message">
+        <h2>Connection unavailable</h2>
+        <p>Your local work is still saved on this device.</p>
+        <button onClick={() => window.location.reload()}>
+          Return to workspace
+        </button>
+      </div>
+    ) : (
+      this.props.children
+    );
+  }
+}

@@ -27,7 +27,7 @@ const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const url = import.meta.env.VITE_CONVEX_URL;
 const client = url ? new ConvexReactClient(url) : null;
 export default function Session() {
-  const [route, setRoute] = useState<Route>({ page: "Overview" });
+  const [route, setRoute] = useState<Route>({ page: window.location.pathname === "/chat" ? "Chat" : "Overview" });
   const [cloud, setCloud] = useState(false);
   const localAccount = (
     <button

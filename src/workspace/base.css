@@ -1,0 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@scope (.ai-workspace) {
+:scope{font-family:'DM Sans',sans-serif;color:#e9e9ee;background:#101114;font-synthesis:none;text-rendering:optimizeLegibility;color-scheme:dark}*{box-sizing:border-box}:scope{margin:0}button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #c1b2ff;outline-offset:4px}button{color:inherit}h1,h2,h3,p{margin-top:0}button,input,select,textarea{border-radius:9px}input,textarea,select{background:#141519;border:1px solid #36363f;color:#eee;padding:12px;width:100%}textarea{resize:vertical}label{display:block;font-size:13px;color:#b7b6c1}label input,label textarea,label select{margin:8px 0 19px}small{font-size:12px}button{border:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}h1,h2,h3{font-family:Manrope,sans-serif}
+
+}

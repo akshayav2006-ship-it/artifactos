@@ -59,3 +59,5 @@ The earlier frontend is preserved in `previous-app/` as text files. The existing
 ### Sending from Gmail without a custom domain
 
 Set `EMAIL_PROVIDER=gmail`, `GMAIL_USER` to the real sending Gmail account, and `GMAIL_APP_PASSWORD` to a Google App Password (not the account's normal password). Keep credentials in Convex environment settings. `APP_URL` must point to the app recipients can access. Gmail sends from the authenticated account and does not use the Resend test sender. Enable 2-Step Verification and generate the App Password through the account's Google security settings. Email sending remains unavailable until these settings are complete.
+
+The routed dashboard, projects, artifacts, profile, and settings pages are preserved. Open `/chat` from the dashboard’s AI Chat navigation for the connected AI composer, or `/workspace` for the complete local/shared contribution workspace. Workspace styling is scoped to avoid changing the routed dashboard pages.

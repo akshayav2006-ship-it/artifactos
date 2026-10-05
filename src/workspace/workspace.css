@@ -1,3 +1,4 @@
+@scope (.ai-workspace) {
 /* Codex-like shell. Overview retains its existing cards and violet accent. */
 .codex-shell {
   grid-template-columns: 252px minmax(0, 1fr);
@@ -1154,3 +1155,5 @@
 .ai-connections label { display: grid; gap: 7px; margin: 12px 0; font-size: 12px; }
 .ai-connections a { color: #3e6151; text-decoration: underline; }
 .ai-connections button { margin-right: 8px; }
+
+}

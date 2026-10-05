@@ -1,2 +1,92 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
-:root{font-family:'DM Sans',sans-serif;color:#e9e9ee;background:#101114;font-synthesis:none;text-rendering:optimizeLegibility;color-scheme:dark}*{box-sizing:border-box}body{margin:0}button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #c1b2ff;outline-offset:4px}button{color:inherit}h1,h2,h3,p{margin-top:0}button,input,select,textarea{border-radius:9px}input,textarea,select{background:#141519;border:1px solid #36363f;color:#eee;padding:12px;width:100%}textarea{resize:vertical}label{display:block;font-size:13px;color:#b7b6c1}label input,label textarea,label select{margin:8px 0 19px}small{font-size:12px}button{border:0}pre{white-space:pre-wrap;overflow-wrap:anywhere}h1,h2,h3{font-family:Manrope,sans-serif}
+html {
+  background: linear-gradient(135deg, #f5f7ff 0%, #eef2ff 100%);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #111827;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: none;
+  cursor: pointer;
+}
+
+.panel-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(229, 231, 235, 0.95);
+  border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  padding: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+.primary-btn,
+.secondary-btn,
+.muted-btn {
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.primary-btn:hover,
+.secondary-btn:hover,
+.muted-btn:hover {
+  transform: translateY(-1px);
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: white;
+  box-shadow: 0 8px 18px rgba(109, 40, 217, 0.25);
+}
+
+.secondary-btn {
+  background: #f5f3ff;
+  color: #5b21b6;
+}
+
+.muted-btn {
+  background: #f9fafb;
+  color: #374151;
+}
+
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-title-row h3,
+.page-header-card h2 {
+  margin: 0;
+}

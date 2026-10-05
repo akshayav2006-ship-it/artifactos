@@ -1,5 +1,5 @@
 import AIControls from "./AIControls";
-import type { AIRequest } from "../../shared/ai";
+import type { AIRequest, ModelProvenance } from "../../shared/ai";
 import { ConvexError } from "convex/values";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -1428,11 +1428,32 @@ function ChatView({
                       </span>
                     </div>
                     <pre>{p.result}</pre>
+                    {p.provenance && <ModelDetails model={p.provenance} />}
                   </div>
                 ) : (
                   <div className="connection-note">
                     {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "Saved in your notebook. Select an AI model to generate replies, or attach a result below."}
                   </div>
+                )}
+                {data.responseVersions.some(v => v.promptId === p.id) && (
+                  <details className="response-history">
+                    <summary>Response history</summary>
+                    {data.responseVersions.filter(v => v.promptId === p.id)
+                      .sort((a, b) => b.createdAt - a.createdAt)
+                      .map(version => (
+                        <section key={version.id} className="response-version">
+                          <div className="message-meta">
+                            <strong>{version.source === "ai" ? "AI response" : version.source === "manual" ? "Manual result" : "Earlier saved result"}</strong>
+                            <span>{version.author} · {version.id.slice(-7)}</span>
+                            <time>{date(version.createdAt)}</time>
+                            {p.currentVersionId === version.id && <span>Current</span>}
+                          </div>
+                          {version.provenance && <ModelDetails model={version.provenance} />}
+                          {version.source === "legacy" && <p className="muted">Preserved before replacement; original source and response time are unknown.</p>}
+                          <pre>{version.body}</pre>
+                        </section>
+                      ))}
+                  </details>
                 )}
                 {canWrite && p.status !== "generating" && (
                   <div className="message-actions">
@@ -1661,6 +1682,8 @@ function CommitCard({
       </small>
       <details>
         <summary>View snapshot · {commit.id.slice(-7)}</summary>
+        {commit.sourceVersionId && <p>Source response · {commit.sourceVersionId.slice(-7)}</p>}
+        {commit.sourceModel && <><p>Source model</p><ModelDetails model={commit.sourceModel} /></>}
         <pre>{commit.body}</pre>
       </details>
       {pushed ? (
@@ -1674,4 +1697,11 @@ function CommitCard({
       )}
     </div>
   );
+}
+
+function ModelDetails({ model }: { model: ModelProvenance }) {
+  return <div className="model-provenance">
+    <span>{model.provider === "gemini" ? "Gemini" : "ChatGPT"} · Requested: {model.requestedModel}</span>
+    <span>Reported model/version: {model.resolvedModel || "Not provided"}</span>
+  </div>;
 }

@@ -240,7 +240,12 @@ function Remote({
     chatId ? { chatId } : "skip",
     { initialNumItems: 30 },
   );
-  const pages = [promptPages, artifactPages, commitPages];
+  const responsePages = usePaginatedQuery(
+    api.workspace.listResponseVersions,
+    chatId ? { chatId } : "skip",
+    { initialNumItems: 30 },
+  );
+  const pages = [promptPages, artifactPages, commitPages, responsePages];
   const more = pages.some((p) => p.status === "CanLoadMore");
   const loadMore = () => {
     pages.forEach((p) => {
@@ -319,6 +324,7 @@ function Remote({
     },
   };
   const data: Data = {
+    responseVersions: responsePages.results,
     projects: (projects || []).map((p) => ({
       id: p._id,
       name: p.name,

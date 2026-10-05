@@ -1,4 +1,4 @@
-import type { AIRequest } from "./ai";
+import type { AIRequest, ModelProvenance } from "./ai";
 export type Role = "owner" | "admin" | "member" | "reviewer" | "viewer";
 export type Project = {
   id: string;
@@ -16,6 +16,9 @@ export type Chat = {
   createdAt: number;
 };
 export type Prompt = {
+  provenance?: ModelProvenance;
+  currentVersionId?: string;
+  aiVersionId?: string;
   review?: {
     title: string;
     score: number;
@@ -36,6 +39,8 @@ export type Prompt = {
   model?: string;
 };
 export type Commit = {
+  sourceVersionId?: string;
+  sourceModel?: ModelProvenance;
   pushed?: boolean;
   id: string;
   chatId: string;
@@ -49,6 +54,8 @@ export type Commit = {
   createdAt: number;
 };
 export type Artifact = {
+  sourceVersionId?: string;
+  sourceModel?: ModelProvenance;
   id: string;
   commitId: string;
   chatId: string;
@@ -82,7 +89,19 @@ export type Invite = {
   status: string;
   delivery?: string;
 };
+export type ResponseVersion = {
+  id: string;
+  chatId: string;
+  promptId: string;
+  authorId: string;
+  author: string;
+  body: string;
+  source: "ai" | "manual" | "legacy";
+  provenance?: ModelProvenance;
+  createdAt: number;
+};
 export type Data = {
+  responseVersions: ResponseVersion[];
   projects: Project[];
   chats: Chat[];
   prompts: Prompt[];
@@ -93,6 +112,7 @@ export type Data = {
   incoming: Invite[];
 };
 export const emptyData: Data = {
+  responseVersions: [],
   projects: [],
   chats: [],
   prompts: [],

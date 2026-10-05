@@ -1,12 +1,14 @@
 import { localAI } from "./aiClient";
-import type { ChatMessage } from "../../shared/ai";
-import type { Actions, Data } from "../../shared/workspace";
+import type { AIReply, ChatMessage } from "../../shared/ai";
+import type { Actions, Data, Prompt } from "../../shared/workspace";
 import { emptyData } from "../../shared/workspace";
 export const storageKey = "artifactos-workspace-v2";
 export function loadLocal(): Data {
   const raw = localStorage.getItem(storageKey);
   if (raw) {
     const parsed = JSON.parse(raw);
+    // v2 workspaces created before response history remain readable.
+    if (parsed.responseVersions === undefined) parsed.responseVersions = [];
     if (!Object.keys(emptyData).every((k) => Array.isArray(parsed[k])))
       throw new Error(
         "Saved workspace format could not be read. Your data has not been overwritten.",
@@ -92,6 +94,16 @@ export function localActions(
     change(data);
     persist(data);
   };
+  const preserveResult = (data: Data, prompt: Prompt) => {
+    if (prompt.result && !prompt.currentVersionId) {
+      prompt.currentVersionId = id();
+      data.responseVersions.unshift({
+        id: prompt.currentVersionId, chatId: prompt.chatId, promptId: prompt.id,
+        authorId: prompt.authorId, author: prompt.author, body: prompt.result,
+        source: "legacy", createdAt: Date.now(),
+      });
+    }
+  };
   return {
     async createProject(name, description) {
       name = name.trim();
@@ -163,6 +175,7 @@ export function localActions(
           result: "",
           status: ai ? "generating" : "saved",
           model: ai?.model.name,
+          provenance: ai ? { provider: ai.model.provider, requestedModel: ai.model.id } : undefined,
           createdAt: Date.now(),
         });
       });
@@ -172,8 +185,19 @@ export function localActions(
             { role: "user" as const, content: p.text },
             ...(p.result ? [{ role: "assistant" as const, content: p.result }] : []),
           ]);
-          const response = await localAI<{ text: string }>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, messages: history });
-          update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.result = response.text; p.status = "complete"; });
+          const response = await localAI<AIReply>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, messages: history });
+          if (!response.text.trim()) throw new Error("AI returned an empty reply.");
+          update(d => {
+            const p = d.prompts.find(p => p.id === promptId)!;
+            const provenance = { provider: ai.model.provider, requestedModel: ai.model.id, resolvedModel: response.resolvedModel };
+            const versionId = id();
+            d.responseVersions.unshift({ id: versionId, chatId, promptId,
+              authorId: p.authorId, author: p.author, body: response.text,
+              source: "ai", provenance, createdAt: Date.now(),
+            });
+            p.result = response.text; p.status = "complete";
+            p.provenance = provenance; p.currentVersionId = versionId; p.aiVersionId = versionId;
+          });
         } catch (error) {
           update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.status = "failed"; p.error = error instanceof Error ? error.message : "AI request failed."; });
         }
@@ -183,8 +207,18 @@ export function localActions(
       update((d) => {
         const p = d.prompts.find((p) => p.id === promptId);
         if (!p) throw new Error("Prompt not found.");
+        if (p.status === "generating") throw new Error("Wait for the current reply to finish.");
+        if (!result.trim()) throw new Error("Enter a result.");
+        preserveResult(d, p);
+        p.currentVersionId = id();
+        d.responseVersions.unshift({ id: p.currentVersionId, chatId: p.chatId, promptId,
+          authorId: "local", author: "You", body: result, source: "manual", createdAt: Date.now(),
+        });
         p.result = result;
         p.status = "complete";
+        delete p.model;
+        delete p.provenance;
+        delete p.error;
       });
     },
     async commit(chatId, promptId, title, body, message) {
@@ -193,9 +227,13 @@ export function localActions(
         if (!chat) throw new Error("Chat not found.");
         if (!chat.projectId)
           throw new Error("Choose a project before committing an artifact.");
-        if (!d.prompts.some((p) => p.id === promptId && p.chatId === chatId))
+        const prompt = d.prompts.find((p) => p.id === promptId && p.chatId === chatId);
+        if (!prompt)
           throw new Error("Source prompt does not belong to this chat.");
+        preserveResult(d, prompt);
         d.commits.unshift({
+          sourceVersionId: prompt.currentVersionId,
+          sourceModel: prompt.provenance,
           id: id(),
           chatId,
           projectId: chat.projectId,

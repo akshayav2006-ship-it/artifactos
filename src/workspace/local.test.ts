@@ -57,3 +57,32 @@ test('local provider failure preserves the prompt for retry', async () => {
     expect(data.prompts[0]).toMatchObject({ text: 'Keep my prompt', status: 'failed', error: 'Quota exceeded' });
   } finally { request.mockRestore(); }
 });
+
+test('local AI and manual versions survive edits, commits, and reloads', async () => {
+  const { vi } = await import('vitest');
+  const { loadLocal, storageKey } = await import('./local');
+  let data = structuredClone(emptyData);
+  const a = localActions(() => data, next => { data = next; });
+  const projectId = await a.createProject('Versions', '');
+  const chatId = await a.createChat(projectId, 'Chat');
+  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ text: 'AI original', resolvedModel: 'model-001' }), { headers: { 'Content-Type': 'application/json' } }));
+  try {
+    await a.sendPrompt(chatId, 'Draft', { model: { id: 'model-alias', name: 'Model', provider: 'chatgpt' } });
+    const prompt = data.prompts[0];
+    await a.commit(chatId, prompt.id, 'Snapshot', prompt.result, 'First');
+    await a.addResult(prompt.id, 'Manual revision');
+    await a.addResult(prompt.id, 'Second revision');
+    expect(data.responseVersions.map(v => v.body)).toEqual(['Second revision', 'Manual revision', 'AI original']);
+    expect(data.responseVersions[2].provenance).toEqual({ provider: 'chatgpt', requestedModel: 'model-alias', resolvedModel: 'model-001' });
+    expect(data.prompts[0].provenance).toBeUndefined();
+    expect(data.commits[0]).toMatchObject({ body: 'AI original', sourceVersionId: data.responseVersions[2].id, sourceModel: { resolvedModel: 'model-001' } });
+    const stored = JSON.stringify(data);
+    vi.stubGlobal('localStorage', { getItem: (key: string) => key === storageKey ? stored : null });
+    expect(loadLocal().responseVersions).toEqual(data.responseVersions);
+    const legacy = { ...data, responseVersions: undefined, prompts: [{ ...data.prompts[0], currentVersionId: undefined, aiVersionId: undefined }] };
+    vi.stubGlobal('localStorage', { getItem: (key: string) => key === storageKey ? JSON.stringify(legacy) : null });
+    data = loadLocal();
+    await a.addResult(data.prompts[0].id, 'Migrated revision');
+    expect(data.responseVersions[1]).toMatchObject({ source: 'legacy', body: 'Second revision' });
+  } finally { request.mockRestore(); vi.unstubAllGlobals(); }
+});

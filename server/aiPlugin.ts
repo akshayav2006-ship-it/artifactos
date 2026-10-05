@@ -3,6 +3,7 @@ import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import * as chatgpt from './chatgpt.ts';
 import type { ChatMessage } from '../shared/ai.ts';
+import { reportedModel } from '../shared/ai.ts';
 
 export function aiPlugin(): Plugin {
   return {
@@ -28,14 +29,14 @@ export function aiPlugin(): Plugin {
             case '/models': result = await chatgpt.models(); break;
             case '/reply': {
               if (typeof body.model !== 'string' || !Array.isArray(body.messages) || !body.messages.length || body.messages.length > 100 || body.messages.some((m: ChatMessage) => !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || m.content.length > 50000)) throw new Error('Invalid conversation.');
-              if (body.provider === 'chatgpt') result = { text: await chatgpt.reply(body.model, body.messages) };
+              if (body.provider === 'chatgpt') result = await chatgpt.reply(body.model, body.messages);
               else if (body.provider === 'gemini') {
                 if (typeof body.apiKey !== 'string' || !body.apiKey.trim()) throw new Error('Enter a Gemini API key from Google AI Studio.');
                 if (!/^gemini-[a-z0-9.-]+$/.test(body.model)) throw new Error('Invalid Gemini model.');
                 try {
                   const response = await generateText({ model: createGoogleGenerativeAI({ apiKey: body.apiKey })(body.model), messages: body.messages, maxRetries: 0, abortSignal: AbortSignal.timeout(120000) });
                   if (!response.text.trim()) throw new Error('empty');
-                  result = { text: response.text };
+                  result = { text: response.text, resolvedModel: reportedModel(response.response, body.model) };
                 } catch { throw new Error('Gemini could not reply. Check your AI Studio key, model access, and free-tier quota, then retry.'); }
               } else throw new Error('Unknown provider.');
               break;

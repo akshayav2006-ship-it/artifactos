@@ -48,3 +48,67 @@ test('concurrent generation is blocked and abandoned generations expire', async 
   await user.mutation(internal.ai.expire, { promptId });
   expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts.find(p => p.id === promptId)?.status).toBe('failed');
 });
+
+test('AI history survives manual edits and commits retain source provenance', async () => {
+  const { user, chatId, t } = await setup();
+  const projectId = await user.mutation(api.projects.create, { name: 'History', description: '' });
+  await user.mutation(api.workspace.assignChat, { chatId, projectId });
+  vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'Original AI reply', response: { modelId: 'gemini-version-001' } } as never);
+  await user.action(api.ai.reply, { chatId, text: 'Draft', model: 'gemini-2.5-flash', apiKey: 'secret-test-key' });
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  const commitId = await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Original', body: prompt.result, message: 'Snapshot' });
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Human revision' });
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Second human revision' });
+  const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
+  expect(versions.page).toHaveLength(3);
+  expect(versions.page.map(v => v.body)).toEqual(['Second human revision', 'Human revision', 'Original AI reply']);
+  expect(versions.page[2]).toMatchObject({ author: 'Tester', source: 'ai', provenance: { provider: 'gemini', requestedModel: 'gemini-2.5-flash', resolvedModel: 'gemini-version-001' } });
+  expect(versions.page[0].provenance).toBeUndefined();
+  const updated = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(updated).toMatchObject({ authorId: prompt.authorId, text: 'Draft', result: 'Second human revision' });
+  expect(updated.model).toBeUndefined();
+  expect(updated.provenance).toBeUndefined();
+  await user.mutation(api.workspace.push, { commitId });
+  const artifact = (await user.query(api.workspace.scope, { projectId, limit: 10 })).artifacts[0];
+  expect(artifact).toMatchObject({ body: 'Original AI reply', sourceVersionId: versions.page[2].id, sourceModel: { resolvedModel: 'gemini-version-001' } });
+  expect(JSON.stringify(await t.run(ctx => ctx.db.query('workResponseVersions').take(10)))).not.toContain('secret-test-key');
+});
+
+test('history is access-controlled and paginated', async () => {
+  const { t, user, chatId } = await setup();
+  const promptId = await user.mutation(api.workspace.sendPrompt, { chatId, text: 'Private' });
+  for (const result of ['One', 'Two', 'Three']) await user.mutation(api.workspace.addResult, { promptId, result });
+  const page = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 2, cursor: null } });
+  expect(page.page.map(v => v.body)).toEqual(['Three', 'Two']);
+  const next = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 2, cursor: page.continueCursor } });
+  expect(next.page.map(v => v.body)).toEqual(['One']);
+  const other = t.withIdentity({ subject: 'other' });
+  await other.mutation(api.users.syncCurrentUser, { name: 'Other', email: 'other@example.com' });
+  await expect(other.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } })).rejects.toThrow('private');
+});
+
+test('late completion is saved once and never overwrites a manual revision', async () => {
+  const { user, chatId } = await setup();
+  const { promptId } = await user.mutation(internal.ai.begin, { chatId, text: 'Draft', model: 'gemini-test' });
+  await expect(user.mutation(api.workspace.addResult, { promptId, result: 'Too early' })).rejects.toThrow('Wait');
+  await user.mutation(internal.ai.expire, { promptId });
+  await user.mutation(api.workspace.addResult, { promptId, result: 'Manual replacement' });
+  const completion = { promptId, result: 'Late AI reply', requestedModel: 'gemini-test' };
+  await user.mutation(internal.ai.finish, completion);
+  await user.mutation(internal.ai.finish, completion);
+  const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
+  expect(versions.page).toHaveLength(2);
+  expect(versions.page[0]).toMatchObject({ body: 'Late AI reply', provenance: { requestedModel: 'gemini-test' } });
+  expect(versions.page[0].provenance?.resolvedModel).toBeUndefined();
+  expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0].result).toBe('Manual replacement');
+});
+
+test('legacy results are preserved without guessing provenance', async () => {
+  const { user, chatId, t } = await setup();
+  const promptId = await user.mutation(api.workspace.sendPrompt, { chatId, text: 'Old prompt' });
+  await t.run(ctx => ctx.db.patch(promptId, { result: 'Old result', model: 'Old model label', status: 'complete' }));
+  await user.mutation(api.workspace.addResult, { promptId, result: 'New result' });
+  const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
+  expect(versions.page[1]).toMatchObject({ body: 'Old result', source: 'legacy' });
+  expect(versions.page[1].provenance).toBeUndefined();
+});

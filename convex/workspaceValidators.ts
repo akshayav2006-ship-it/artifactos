@@ -1,4 +1,20 @@
 import { v } from "convex/values";
+export const modelProvenance = v.object({
+  provider: v.union(v.literal("gemini"), v.literal("chatgpt")),
+  requestedModel: v.string(),
+  resolvedModel: v.optional(v.string()),
+});
+export const responseVersionFields = {
+  chatId: v.id("workChats"),
+  promptId: v.id("workPrompts"),
+  authorId: v.id("users"),
+  author: v.string(),
+  body: v.string(),
+  source: v.union(v.literal("ai"), v.literal("manual"), v.literal("legacy")),
+  provenance: v.optional(modelProvenance),
+  createdAt: v.number(),
+};
+export const responseVersionView = v.object({ ...responseVersionFields, id: v.string() });
 export const role = v.union(
   v.literal("owner"),
   v.literal("admin"),
@@ -22,6 +38,9 @@ export const chatFields = {
   createdAt: v.number(),
 };
 export const promptFields = {
+  provenance: v.optional(modelProvenance),
+  currentVersionId: v.optional(v.id("workResponseVersions")),
+  aiVersionId: v.optional(v.id("workResponseVersions")),
   chatId: v.id("workChats"),
   projectId: v.optional(v.id("projects")),
   authorId: v.id("users"),
@@ -39,6 +58,8 @@ export const promptFields = {
   model: v.optional(v.string()),
 };
 export const commitFields = {
+  sourceVersionId: v.optional(v.id("workResponseVersions")),
+  sourceModel: v.optional(modelProvenance),
   chatId: v.id("workChats"),
   projectId: v.optional(v.id("projects")),
   promptId: v.id("workPrompts"),

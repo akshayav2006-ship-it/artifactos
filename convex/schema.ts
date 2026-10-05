@@ -6,6 +6,7 @@ import {
   promptFields,
   commitFields,
   artifactFields,
+  responseVersionFields,
 } from "./workspaceValidators";
 
 const projectRole = v.union(
@@ -23,6 +24,8 @@ const subscriptionPlan = v.union(
 );
 
 export default defineSchema({
+  workResponseVersions: defineTable(responseVersionFields)
+    .index("by_chatId", ["chatId"]),
   workChats: defineTable(chatFields)
     .index("by_authorId_and_projectId", ["authorId", "projectId"])
     .index("by_projectId", ["projectId"]),

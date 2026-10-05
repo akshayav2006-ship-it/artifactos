@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { createThread, saveMessage } from "@convex-dev/agent";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { requireCurrentUser, requireMembership, requireRole } from "./lib/auth";
 import {
@@ -10,6 +10,7 @@ import {
   chatView,
   commitView,
   promptView,
+  responseVersionView,
 } from "./workspaceValidators";
 
 function text(value: string, max = 12000) {
@@ -203,14 +204,27 @@ export const sendPrompt = mutation({
     });
   },
 });
+// Preserve existing results without inventing provenance for pre-history records.
+async function preserveResult(ctx: MutationCtx, prompt: Doc<"workPrompts">) {
+  if (prompt.currentVersionId || !prompt.result) return prompt.currentVersionId;
+  const versionId = await ctx.db.insert("workResponseVersions", {
+    chatId: prompt.chatId, promptId: prompt._id,
+    authorId: prompt.authorId, author: prompt.author,
+    body: prompt.result, source: "legacy", createdAt: Date.now(),
+  });
+  await ctx.db.patch(prompt._id, { currentVersionId: versionId });
+  return versionId;
+}
 export const addResult = mutation({
   args: { promptId: v.id("workPrompts"), result: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const prompt = await ctx.db.get(args.promptId);
     if (!prompt) throw new Error("Prompt not found.");
-    const { chat } = await chatAccess(ctx, prompt.chatId, true);
+    const { chat, user } = await chatAccess(ctx, prompt.chatId, true);
+    if (prompt.status === "generating") throw new Error("Wait for the current reply to finish.");
     const result = text(args.result);
+    await preserveResult(ctx, prompt);
     await saveMessage(ctx, components.agent, {
       threadId: chat.agentThreadId,
       message: {
@@ -218,7 +232,14 @@ export const addResult = mutation({
         content: `Contributor attached a result:\n${result}`,
       },
     });
-    await ctx.db.patch(prompt._id, { result, status: "complete" });
+    const currentVersionId = await ctx.db.insert("workResponseVersions", {
+      chatId: chat._id, promptId: prompt._id, authorId: user._id,
+      author: user.name, body: result, source: "manual", createdAt: Date.now(),
+    });
+    await ctx.db.patch(prompt._id, {
+      result, status: "complete", currentVersionId,
+      model: undefined, provenance: undefined, error: undefined,
+    });
     return null;
   },
 });
@@ -238,7 +259,10 @@ export const commit = mutation({
     const prompt = await ctx.db.get(args.promptId);
     if (!prompt || prompt.chatId !== chat._id)
       throw new Error("The source prompt must belong to this chat.");
+    const sourceVersionId = await preserveResult(ctx, prompt);
     return await ctx.db.insert("workCommits", {
+      sourceVersionId,
+      sourceModel: prompt.provenance,
       chatId: chat._id,
       projectId: chat.projectId,
       promptId: prompt._id,
@@ -456,5 +480,20 @@ export const chats = query({
       author: c.author,
       createdAt: c.createdAt,
     }));
+  },
+});
+
+export const listResponseVersions = query({
+  args: { chatId: v.id("workChats"), paginationOpts: paginationOptsValidator },
+  returns: paginationResultValidator(responseVersionView),
+  handler: async (ctx, args) => {
+    await chatAccess(ctx, args.chatId);
+    const result = await ctx.db.query("workResponseVersions")
+      .withIndex("by_chatId", q => q.eq("chatId", args.chatId))
+      .order("desc").paginate(args.paginationOpts);
+    return { ...result, page: result.page.map(({ _id, _creationTime, ...version }) => {
+      void _creationTime;
+      return { ...version, id: _id };
+    }) };
   },
 });

@@ -150,6 +150,7 @@ export async function reply(model: string, input: ChatMessage[]) {
 }
 export async function readReplyStream(body: ReadableStream<Uint8Array>) {
   let buffer = '', output = '', completed = false;
+  let resolvedModel: string | undefined;
   const decoder = new TextDecoder();
   for await (const chunk of body) {
     buffer = (buffer + decoder.decode(chunk, { stream: true })).replace(/\r\n/g, '\n');
@@ -161,9 +162,12 @@ export async function readReplyStream(body: ReadableStream<Uint8Array>) {
       const event = JSON.parse(raw);
       if (event.type === 'response.output_text.delta') output += event.delta;
       if (['response.failed', 'response.incomplete', 'error'].includes(event.type)) throw new Error('ChatGPT could not complete this reply. Check plan limits in ChatGPT Settings and try again.');
-      if (event.type === 'response.completed') completed = true;
+      if (event.type === 'response.completed') {
+        completed = true;
+        if (typeof event.response?.model === 'string') resolvedModel = event.response.model;
+      }
     }
   }
   if (!completed || !output.trim()) throw new Error('ChatGPT response was interrupted or empty. Please try again.');
-  return output;
+  return { text: output, resolvedModel };
 }

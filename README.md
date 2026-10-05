@@ -61,3 +61,11 @@ The earlier frontend is preserved in `previous-app/` as text files. The existing
 Set `EMAIL_PROVIDER=gmail`, `GMAIL_USER` to the real sending Gmail account, and `GMAIL_APP_PASSWORD` to a Google App Password (not the account's normal password). Keep credentials in Convex environment settings. `APP_URL` must point to the app recipients can access. Gmail sends from the authenticated account and does not use the Resend test sender. Enable 2-Step Verification and generate the App Password through the account's Google security settings. Email sending remains unavailable until these settings are complete.
 
 The routed dashboard, projects, artifacts, profile, and settings pages are preserved. Open `/chat` from the dashboard’s AI Chat navigation for the connected AI composer, or `/workspace` for the complete local/shared contribution workspace. Workspace styling is scoped to avoid changing the routed dashboard pages.
+
+## Response versions and model provenance
+
+New AI replies and manual result edits automatically create immutable response versions in both local and shared workspaces. Open **Response history** below a chat prompt to inspect earlier bodies, contributor attribution, and capture times. Shared history is access-controlled with the chat and paginated through **Load more**. Prompt authorship stays unchanged; manual commits remain separate immutable snapshots and retain their source response ID and source model metadata when available.
+
+AI versions record the provider, requested model ID, and provider-reported model/version when supplied. **Not provided** means the provider did not expose a distinct version; an SDK fallback to the requested alias is not treated as a resolved version. Manually replacing a reply clears AI attribution on the current result while retaining the original AI version. Late replies are preserved without overwriting a manual revision.
+
+Existing workspaces remain compatible. An older result is preserved as an **Earlier saved result** before its first edit or commit; its original source and response time cannot be reconstructed. Previously overwritten results cannot be recovered. Response history stores no provider credentials. The Convex Agent component continues to manage provider conversation context; response versions record the application's result revision history.

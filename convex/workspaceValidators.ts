@@ -36,6 +36,7 @@ export const promptFields = {
     v.literal("failed"),
   ),
   error: v.optional(v.string()),
+  model: v.optional(v.string()),
 };
 export const commitFields = {
   chatId: v.id("workChats"),

@@ -1,3 +1,4 @@
+import type { AIRequest } from "./ai";
 export type Role = "owner" | "admin" | "member" | "reviewer" | "viewer";
 export type Project = {
   id: string;
@@ -32,6 +33,7 @@ export type Prompt = {
   createdAt: number;
   status: "saved" | "generating" | "complete" | "failed";
   error?: string;
+  model?: string;
 };
 export type Commit = {
   pushed?: boolean;
@@ -109,7 +111,7 @@ export type Actions = {
   createProject(name: string, description: string): Promise<string>;
   createChat(projectId: string, title: string): Promise<string>;
   assignChat(chatId: string, projectId: string): Promise<void>;
-  sendPrompt(chatId: string, text: string): Promise<void>;
+  sendPrompt(chatId: string, text: string, ai?: AIRequest): Promise<void>;
   addResult(promptId: string, result: string): Promise<void>;
   commit(
     chatId: string,

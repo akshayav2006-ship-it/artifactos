@@ -1,3 +1,5 @@
+import AIControls from "./AIControls";
+import type { AIRequest } from "../../shared/ai";
 import { ConvexError } from "convex/values";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -53,6 +55,8 @@ export default function Workspace({
   loadMore,
   more,
 }: Props) {
+  const [ai, setAI] = useState<AIRequest>();
+  const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
@@ -514,6 +518,8 @@ export default function Workspace({
             </>
           ) : route.page === "Chat" ? (
             <ChatView
+              ai={ai}
+              aiControls={<AIControls apiKey={geminiKey} setApiKey={setGeminiKey} local={local} value={ai} onChange={setAI} busy={busy} />}
               key={route.chatId || `new-${route.projectId || "personal"}`}
               data={data}
               route={route}
@@ -1266,6 +1272,8 @@ function download(title: string, body: string) {
   URL.revokeObjectURL(url);
 }
 function ChatView({
+  ai,
+  aiControls,
   data,
   route,
   actions,
@@ -1275,6 +1283,8 @@ function ChatView({
   navigate,
   local,
 }: {
+  ai?: AIRequest;
+  aiControls: ReactNode;
   data: Data;
   route: Route;
   actions: Actions;
@@ -1303,22 +1313,22 @@ function ChatView({
     (!project || ["owner", "admin", "member"].includes(project.role));
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() || busy) return;
     const message = text.trim();
     await run(
       async () => {
         let id = chat?.id;
         if (!id)
           id = await actions.createChat(projectId, message.slice(0, 100));
-        await actions.sendPrompt(id, message);
         setText("");
         navigate({
           page: "Chat",
           chatId: id,
           projectId: projectId || undefined,
         });
+        await actions.sendPrompt(id, message, ai);
       },
-      local
+      ai ? undefined : local
         ? "Prompt saved on this device."
         : "Prompt saved to the project history.",
     );
@@ -1328,6 +1338,7 @@ function ChatView({
       className={`chat-workspace ${showCommits && chat ? "with-commits" : ""}`}
     >
       <div className="chat-column">
+        {aiControls}
         <div className="chat-toolbar">
           <label className="project-picker">
             <span>▱</span>
@@ -1407,7 +1418,7 @@ function ChatView({
                   <div className="result-message">
                     <div className="message-meta">
                       <span>◇</span>
-                      <strong>Attached result</strong>
+                      <strong>{p.model || "Attached result"}</strong>
                       <span className="score">
                         {data.artifacts.find(
                           (a) => a.promptId === p.id && a.score !== undefined,
@@ -1420,12 +1431,12 @@ function ChatView({
                   </div>
                 ) : (
                   <div className="connection-note">
-                    AI replies aren’t connected yet. You can attach a result and
-                    commit it below.
+                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "Saved in your notebook. Select an AI model to generate replies, or attach a result below."}
                   </div>
                 )}
-                {canWrite && (
+                {canWrite && p.status !== "generating" && (
                   <div className="message-actions">
+                    {p.status === "failed" && <button className="secondary" disabled={busy} onClick={() => setText(p.text)}>Retry prompt</button>}
                     <button
                       className="subtle"
                       onClick={() => setResultPrompt(p)}
@@ -1469,11 +1480,11 @@ function ChatView({
             />
             <div className="composer-bottom">
               <span>
-                Prompt notebook <small>· AI not connected</small>
+                {busy && ai ? "Generating…" : ai?.model.name || "Prompt notebook"} <small>· {ai ? ai.model.provider === "chatgpt" ? "ChatGPT plan" : "AI Studio key" : "save only"}</small>
               </span>
               <button
                 className="send-button"
-                disabled={busy || !text.trim()}
+                disabled={busy || !text.trim() || (ai?.model.provider === "gemini" && !ai.apiKey?.trim())}
                 aria-label="Send prompt"
               >
                 ↑

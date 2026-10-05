@@ -1,3 +1,5 @@
+import { localAI } from "./aiClient";
+import type { ChatMessage } from "../../shared/ai";
 import type { Actions, Data } from "../../shared/workspace";
 import { emptyData } from "../../shared/workspace";
 export const storageKey = "artifactos-workspace-v2";
@@ -9,6 +11,12 @@ export function loadLocal(): Data {
       throw new Error(
         "Saved workspace format could not be read. Your data has not been overwritten.",
       );
+    for (const prompt of parsed.prompts) {
+      if (prompt.status === "generating") {
+        prompt.status = "failed";
+        prompt.error = "This reply was interrupted when the page closed. Send the prompt again.";
+      }
+    }
     return parsed;
   }
   const old = JSON.parse(
@@ -140,22 +148,36 @@ export function localActions(
           });
       });
     },
-    async sendPrompt(chatId, text) {
+    async sendPrompt(chatId, text, ai) {
+      const promptId = id();
       update((d) => {
         const chat = d.chats.find((c) => c.id === chatId);
         if (!chat) throw new Error("Chat not found.");
         d.prompts.push({
-          id: id(),
+          id: promptId,
           chatId,
           projectId: chat.projectId,
           authorId: "local",
           author: "You",
           text,
           result: "",
-          status: "saved",
+          status: ai ? "generating" : "saved",
+          model: ai?.model.name,
           createdAt: Date.now(),
         });
       });
+      if (ai) {
+        try {
+          const history: ChatMessage[] = get().prompts.filter(p => p.chatId === chatId).slice(-30).flatMap(p => [
+            { role: "user" as const, content: p.text },
+            ...(p.result ? [{ role: "assistant" as const, content: p.result }] : []),
+          ]);
+          const response = await localAI<{ text: string }>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, messages: history });
+          update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.result = response.text; p.status = "complete"; });
+        } catch (error) {
+          update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.status = "failed"; p.error = error instanceof Error ? error.message : "AI request failed."; });
+        }
+      }
     },
     async addResult(promptId, result) {
       update((d) => {

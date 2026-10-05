@@ -28,6 +28,7 @@ export default defineSchema({
     .index("by_projectId", ["projectId"]),
   workPrompts: defineTable(promptFields)
     .index("by_chatId", ["chatId"])
+    .index("by_chatId_and_status", ["chatId", "status"])
     .index("by_projectId", ["projectId"])
     .index("by_authorId_and_projectId", ["authorId", "projectId"]),
   workCommits: defineTable(commitFields).index("by_chatId", ["chatId"]),

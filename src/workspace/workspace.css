@@ -1144,3 +1144,13 @@
   justify-content: center;
   padding: 12px 0 30px;
 }
+
+.ai-controls { padding: 16px 24px 0; }
+.ai-picker-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-picker-row label { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted, #777); }
+.ai-controls select, .ai-controls input { border: 1px solid #dedbd4; border-radius: 8px; background: #fff; color: #252525; padding: 9px 12px; max-width: 100%; }
+.ai-connections { margin-top: 12px; padding: 18px; background: #f8f7f4; border: 1px solid #e5e2dc; border-radius: 12px; display: grid; gap: 22px; max-height: 48vh; overflow: auto; }
+.ai-connections p, .ai-connections small { font-size: 12px; line-height: 1.6; color: #6d6b65; }
+.ai-connections label { display: grid; gap: 7px; margin: 12px 0; font-size: 12px; }
+.ai-connections a { color: #3e6151; text-decoration: underline; }
+.ai-connections button { margin-right: 8px; }

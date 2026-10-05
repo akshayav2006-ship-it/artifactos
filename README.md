@@ -42,7 +42,17 @@ Without these settings, Send invitation shows a setup error and does not create 
 
 ## AI connection
 
-Chat currently saves prompts and contributor-attached results. No live model is configured, and no AI response or trust score is fabricated. Shared chat history is persisted using the Convex Agent component. The UI explicitly shows that live AI is not connected.
+Select a model in **New chat → Model**, then open **AI connections**.
+
+- **Gemini:** paste your own [Google AI Studio key](https://aistudio.google.com/apikey). Gemini 2.5 Flash and Flash-Lite are included; you can also enter another Gemini model ID. Free-tier eligibility and quotas depend on your model, region, and Google project billing. Keys remain in React memory and are sent with generation requests, never persisted in browser storage or application tables. In local development, requests pass through the Vite backend; signed-in workspaces use the Convex Agent component for durable conversation context. Deploy backend changes with `npx convex dev --once`.
+- **ChatGPT plan:** run `npm run dev` on `localhost` or `127.0.0.1`, open the local workspace, and choose **Continue with ChatGPT**. The official open-source OAuth flow uses PKCE, state, nonce, signature-verified ID tokens, a loopback callback, and separately authorized plan-usage scopes. Eligible accounts provide their available model catalog. Select a ChatGPT model after authorization. Saved registrations can be reconnected individually; disconnect clears local tokens and attempts remote revocation. Manage app limits in ChatGPT Settings.
+- **Notebook:** saves a prompt without contacting any provider. Generated results can be committed and reviewed through the same artifact workflow as attached results.
+
+ChatGPT credentials and the stable host ID live outside this repository at `~/.config/artifactos/chatgpt.json` (owner-only permissions). Access tokens refresh on demand. Do not run multiple Artifactos dev-server processes against this credential file. The local AI endpoints reject non-loopback hosts and cross-origin requests. They are development-only and are not included in static production hosting.
+
+The ChatGPT connection authorizes local AI usage; it does not replace Clerk sign-in for shared project access. Hosted website ChatGPT sign-in requires registered partner credentials and is not enabled here. See the [OpenAI website integration requirements](https://developers.openai.com/siwc/website) and [open-source plan-usage flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in).
+
+Provider replies display generating, completed, or failed states. Retry restores the failed prompt to the composer. No provider credentials are included in saved prompt records. Real account authorization and provider inference require your own account/key; automated tests cover the workflow with mocked provider responses.
 
 The earlier frontend is preserved in `previous-app/` as text files. The existing project/team backend remains available alongside the new workflow.
 

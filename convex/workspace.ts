@@ -18,7 +18,7 @@ function text(value: string, max = 12000) {
     throw new Error(`Enter between 1 and ${max} characters.`);
   return trimmed;
 }
-async function chatAccess(
+export async function chatAccess(
   ctx: QueryCtx | MutationCtx,
   chatId: Id<"workChats">,
   write = false,

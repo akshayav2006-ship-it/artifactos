@@ -269,6 +269,7 @@ function Remote({
   const assign = useMutation(api.workspace.assignChat);
   const send = useMutation(api.workspace.sendPrompt);
   const generate = useAction(api.ai.reply);
+  const savePrompt = useMutation(api.workspace.savePrompt);
   const result = useMutation(api.workspace.addResult);
   const commit = useMutation(api.workspace.commit);
   const push = useMutation(api.workspace.push);
@@ -293,6 +294,9 @@ function Remote({
         if (ai.model.provider !== "gemini") throw new Error("ChatGPT subscription access is available in the local workspace.");
         await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, apiKey: ai.apiKey || "" });
       } else await send({ chatId: chatId as Id<"workChats">, text });
+    },
+    savePrompt: async (promptId) => {
+      await savePrompt({ promptId: promptId as Id<"workPrompts"> });
     },
     addResult: async (promptId, value) => {
       await result({ promptId: promptId as Id<"workPrompts">, result: value });

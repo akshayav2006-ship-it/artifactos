@@ -173,9 +173,10 @@ export function localActions(
           author: "You",
           text,
           result: "",
+          saved: !ai,
           status: ai ? "generating" : "saved",
           model: ai?.model.name,
-          provenance: ai ? { provider: ai.model.provider, requestedModel: ai.model.id } : undefined,
+          replyProvenance: ai ? { provider: ai.model.provider, requestedModel: ai.model.id } : undefined,
           createdAt: Date.now(),
         });
       });
@@ -183,7 +184,7 @@ export function localActions(
         try {
           const history: ChatMessage[] = get().prompts.filter(p => p.chatId === chatId).slice(-30).flatMap(p => [
             { role: "user" as const, content: p.text },
-            ...(p.result ? [{ role: "assistant" as const, content: p.result }] : []),
+            ...((p.reply || p.result) ? [{ role: "assistant" as const, content: p.reply || p.result }] : []),
           ]);
           const response = await localAI<AIReply>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, messages: history });
           if (!response.text.trim()) throw new Error("AI returned an empty reply.");
@@ -195,13 +196,20 @@ export function localActions(
               authorId: p.authorId, author: p.author, body: response.text,
               source: "ai", provenance, createdAt: Date.now(),
             });
-            p.result = response.text; p.status = "complete";
-            p.provenance = provenance; p.currentVersionId = versionId; p.aiVersionId = versionId;
+            p.reply = response.text; p.status = "complete";
+            p.replyProvenance = provenance; p.aiVersionId = versionId;
           });
         } catch (error) {
           update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.status = "failed"; p.error = error instanceof Error ? error.message : "AI request failed."; });
         }
       }
+    },
+    async savePrompt(promptId) {
+      update(d => {
+        const prompt = d.prompts.find(p => p.id === promptId);
+        if (!prompt) throw new Error("Prompt not found.");
+        prompt.saved = true;
+      });
     },
     async addResult(promptId, result) {
       update((d) => {
@@ -215,6 +223,7 @@ export function localActions(
           authorId: "local", author: "You", body: result, source: "manual", createdAt: Date.now(),
         });
         p.result = result;
+        p.saved = true;
         p.status = "complete";
         delete p.model;
         delete p.provenance;

@@ -15,12 +15,12 @@ Open the address printed by Vite. `npm run build` checks the frontend and builds
 
 - **Overview** keeps the dashboard layout.
 - **New chat** starts without a project. Select a project before or after sending prompts; the project is locked after the first commit so provenance cannot change.
-- **Prompt** opens a project picker, then the project's prompt history with author, time, result, and the most recent reviewed result's trust score.
+- **Prompt** opens a project picker, then the project's selected saved prompts with author, time, result, and the most recent reviewed result's trust score.
 - **Artifact** opens a project picker, then pushed artifacts with review status. A commit alone does not publish an artifact.
 - **Pinned** stores shortcuts to projects and chats for the current local user or signed-in account.
 - **Projects** has a create button. A project shows its name, description, invitations, collaborators, chats, prompts, and pushed artifacts.
 
-In chat, attach a result, create one or more immutable commits, then push individual commits. A different project owner or admin can verify a pushed artifact or request changes, entering a trust score from 0 to 100 and review notes. Contributors, reviewers, and viewers cannot verify. Scores are human review scores, not automatically generated confidence estimates.
+Each person selects their own model and chats in Artifactos. Use **Save prompt** on selected turns to add them to the prompt library. Saving a prompt never attaches its AI reply. In chat, manually paste and attach a result, create one or more immutable commits, then push individual commits. A different project owner or admin can verify a pushed artifact or request changes, entering a trust score from 0 to 100 and review notes. Contributors, reviewers, and viewers cannot verify. Scores are human review scores, not automatically generated confidence estimates.
 
 ## Local and shared workspaces
 
@@ -46,7 +46,7 @@ Select a model in **New chat → Model**, then open **AI connections**.
 
 - **Gemini:** paste your own [Google AI Studio key](https://aistudio.google.com/apikey). Gemini 2.5 Flash and Flash-Lite are included; you can also enter another Gemini model ID. Free-tier eligibility and quotas depend on your model, region, and Google project billing. Keys remain in React memory and are sent with generation requests, never persisted in browser storage or application tables. In local development, requests pass through the Vite backend; signed-in workspaces use the Convex Agent component for durable conversation context. Deploy backend changes with `npx convex dev --once`.
 - **ChatGPT plan:** run `npm run dev` on `localhost` or `127.0.0.1`, open the local workspace, and choose **Continue with ChatGPT**. The official open-source OAuth flow uses PKCE, state, nonce, signature-verified ID tokens, a loopback callback, and separately authorized plan-usage scopes. Eligible accounts provide their available model catalog. Select a ChatGPT model after authorization. Saved registrations can be reconnected individually; disconnect clears local tokens and attempts remote revocation. Manage app limits in ChatGPT Settings.
-- **Notebook:** saves a prompt without contacting any provider. Generated results can be committed and reviewed through the same artifact workflow as attached results.
+- **Notebook:** saves a prompt without contacting any provider. AI replies stay in the conversation. Results must be manually attached before committing and reviewing them.
 
 ChatGPT credentials and the stable host ID live outside this repository at `~/.config/artifactos/chatgpt.json` (owner-only permissions). Access tokens refresh on demand. Do not run multiple Artifactos dev-server processes against this credential file. The local AI endpoints reject non-loopback hosts and cross-origin requests. They are development-only and are not included in static production hosting.
 
@@ -66,6 +66,6 @@ The routed dashboard, projects, artifacts, profile, and settings pages are prese
 
 New AI replies and manual result edits automatically create immutable response versions in both local and shared workspaces. Open **Response history** below a chat prompt to inspect earlier bodies, contributor attribution, and capture times. Shared history is access-controlled with the chat and paginated through **Load more**. Prompt authorship stays unchanged; manual commits remain separate immutable snapshots and retain their source response ID and source model metadata when available.
 
-AI versions record the provider, requested model ID, and provider-reported model/version when supplied. **Not provided** means the provider did not expose a distinct version; an SDK fallback to the requested alias is not treated as a resolved version. Manually replacing a reply clears AI attribution on the current result while retaining the original AI version. Late replies are preserved without overwriting a manual revision.
+AI versions record the provider, requested model ID, and provider-reported model/version when supplied. **Not provided** means the provider did not expose a distinct version; an SDK fallback to the requested alias is not treated as a resolved version. Manually attaching a result leaves the conversational reply and its model attribution intact. The attached result is attributed to the contributor, not to the AI model. Late replies are preserved without overwriting a manual revision.
 
 Existing workspaces remain compatible. An older result is preserved as an **Earlier saved result** before its first edit or commit; its original source and response time cannot be reconstructed. Previously overwritten results cannot be recovered. Response history stores no provider credentials. The Convex Agent component continues to manage provider conversation context; response versions record the application's result revision history.

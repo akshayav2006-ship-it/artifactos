@@ -41,7 +41,10 @@ test('local AI sends conversation context and stores provider replies without cr
     expect(JSON.parse(String(request.mock.calls[0][1]?.body)).messages).toEqual([
       { role: 'user', content: 'First question' }, { role: 'assistant', content: 'First answer' }, { role: 'user', content: 'Follow up' },
     ]);
-    expect(data.prompts[1]).toMatchObject({ status: 'complete', result: 'Second answer', model: 'Gemini' });
+    expect(data.prompts[1]).toMatchObject({ status: 'complete', reply: 'Second answer', result: '', saved: false, model: 'Gemini' });
+    await a.savePrompt(data.prompts[1].id);
+    expect(data.prompts[1]).toMatchObject({ saved: true, result: '' });
+    expect(data.prompts[1].currentVersionId).toBeUndefined();
     expect(JSON.stringify(data)).not.toContain('private-key');
   } finally { request.mockRestore(); }
 });
@@ -69,13 +72,19 @@ test('local AI and manual versions survive edits, commits, and reloads', async (
   try {
     await a.sendPrompt(chatId, 'Draft', { model: { id: 'model-alias', name: 'Model', provider: 'chatgpt' } });
     const prompt = data.prompts[0];
-    await a.commit(chatId, prompt.id, 'Snapshot', prompt.result, 'First');
     await a.addResult(prompt.id, 'Manual revision');
+    await a.commit(chatId, prompt.id, 'Snapshot', data.prompts[0].result, 'First');
     await a.addResult(prompt.id, 'Second revision');
     expect(data.responseVersions.map(v => v.body)).toEqual(['Second revision', 'Manual revision', 'AI original']);
     expect(data.responseVersions[2].provenance).toEqual({ provider: 'chatgpt', requestedModel: 'model-alias', resolvedModel: 'model-001' });
     expect(data.prompts[0].provenance).toBeUndefined();
-    expect(data.commits[0]).toMatchObject({ body: 'AI original', sourceVersionId: data.responseVersions[2].id, sourceModel: { resolvedModel: 'model-001' } });
+    expect(data.commits[0]).toMatchObject({ body: 'Manual revision', sourceVersionId: data.responseVersions[1].id });
+    expect(data.commits[0].sourceModel).toBeUndefined();
+    expect(data.prompts[0].reply).toBe('AI original');
+    await a.sendPrompt(chatId, 'Continue', { model: { id: 'model-alias', name: 'Model', provider: 'chatgpt' } });
+    expect(JSON.parse(String(request.mock.calls[1][1]?.body)).messages).toEqual([
+      { role: 'user', content: 'Draft' }, { role: 'assistant', content: 'AI original' }, { role: 'user', content: 'Continue' },
+    ]);
     const stored = JSON.stringify(data);
     vi.stubGlobal('localStorage', { getItem: (key: string) => key === storageKey ? stored : null });
     expect(loadLocal().responseVersions).toEqual(data.responseVersions);

@@ -38,6 +38,9 @@ export const chatFields = {
   createdAt: v.number(),
 };
 export const promptFields = {
+  saved: v.optional(v.boolean()),
+  reply: v.optional(v.string()),
+  replyProvenance: v.optional(modelProvenance),
   provenance: v.optional(modelProvenance),
   currentVersionId: v.optional(v.id("workResponseVersions")),
   aiVersionId: v.optional(v.id("workResponseVersions")),

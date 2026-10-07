@@ -13,7 +13,7 @@ export const begin = internalMutation({
     const { chat, user } = await chatAccess(ctx, args.chatId, true);
     const recent = await ctx.db.query('workPrompts').withIndex('by_chatId_and_status', q => q.eq('chatId', chat._id).eq('status', 'generating')).order('desc').first();
     if (recent?.status === 'generating' && Date.now() - recent.createdAt < 180000) throw new ConvexError('Wait for the current reply to finish.');
-    const promptId = await ctx.db.insert('workPrompts', { chatId: chat._id, projectId: chat.projectId, authorId: user._id, author: user.name, text: args.text, result: '', status: 'generating', model: args.model, provenance: { provider: 'gemini', requestedModel: args.model }, createdAt: Date.now() });
+    const promptId = await ctx.db.insert('workPrompts', { chatId: chat._id, projectId: chat.projectId, authorId: user._id, author: user.name, text: args.text, saved: false, result: '', status: 'generating', model: args.model, replyProvenance: { provider: 'gemini', requestedModel: args.model }, createdAt: Date.now() });
     await ctx.scheduler.runAfter(180000, internal.ai.expire, { promptId });
     return { promptId, threadId: chat.agentThreadId };
   },
@@ -43,10 +43,10 @@ export const finish = internalMutation({
       chatId: prompt.chatId, promptId: prompt._id, authorId: prompt.authorId,
       author: prompt.author, body: args.result, source: 'ai', provenance, createdAt: Date.now(),
     });
-    // A late provider completion is retained but must not replace a manual edit.
+    // Keep the conversational reply separate from the manually attached result.
     await ctx.db.patch(prompt._id, {
-      aiVersionId,
-      ...(!prompt.currentVersionId ? { result: args.result, status: 'complete' as const, error: undefined, currentVersionId: aiVersionId, provenance } : {}),
+      aiVersionId, reply: args.result, replyProvenance: provenance,
+      status: 'complete', error: undefined,
     });
     return null;
   },

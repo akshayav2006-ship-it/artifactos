@@ -204,6 +204,17 @@ export const sendPrompt = mutation({
     });
   },
 });
+export const savePrompt = mutation({
+  args: { promptId: v.id("workPrompts") },
+  returns: v.null(),
+  handler: async (ctx, { promptId }) => {
+    const prompt = await ctx.db.get(promptId);
+    if (!prompt) throw new Error("Prompt not found.");
+    await chatAccess(ctx, prompt.chatId, true);
+    await ctx.db.patch(promptId, { saved: true });
+    return null;
+  },
+});
 // Preserve existing results without inventing provenance for pre-history records.
 async function preserveResult(ctx: MutationCtx, prompt: Doc<"workPrompts">) {
   if (prompt.currentVersionId || !prompt.result) return prompt.currentVersionId;
@@ -237,7 +248,7 @@ export const addResult = mutation({
       author: user.name, body: result, source: "manual", createdAt: Date.now(),
     });
     await ctx.db.patch(prompt._id, {
-      result, status: "complete", currentVersionId,
+      result, saved: true, status: "complete", currentVersionId,
       model: undefined, provenance: undefined, error: undefined,
     });
     return null;

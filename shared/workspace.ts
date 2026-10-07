@@ -16,6 +16,9 @@ export type Chat = {
   createdAt: number;
 };
 export type Prompt = {
+  saved?: boolean;
+  reply?: string;
+  replyProvenance?: ModelProvenance;
   provenance?: ModelProvenance;
   currentVersionId?: string;
   aiVersionId?: string;
@@ -132,6 +135,7 @@ export type Actions = {
   createChat(projectId: string, title: string): Promise<string>;
   assignChat(chatId: string, projectId: string): Promise<void>;
   sendPrompt(chatId: string, text: string, ai?: AIRequest): Promise<void>;
+  savePrompt(promptId: string): Promise<void>;
   addResult(promptId: string, result: string): Promise<void>;
   commit(
     chatId: string,

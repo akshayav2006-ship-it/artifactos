@@ -27,7 +27,11 @@ test('successful replies persist model provenance without persisting API keys', 
   vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'A useful reply' } as never);
   await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'gemini-2.5-flash', apiKey: 'secret-test-key' });
   const rows = await user.query(api.workspace.scope, { chatId, limit: 10 });
-  expect(rows.prompts[0]).toMatchObject({ status: 'complete', result: 'A useful reply', model: 'gemini-2.5-flash' });
+  expect(rows.prompts[0]).toMatchObject({ status: 'complete', reply: 'A useful reply', result: '', saved: false, model: 'gemini-2.5-flash' });
+  await user.mutation(api.workspace.savePrompt, { promptId: rows.prompts[0].id });
+  const saved = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(saved).toMatchObject({ saved: true, result: '', reply: 'A useful reply' });
+  expect(saved.currentVersionId).toBeUndefined();
   expect(JSON.stringify(await t.run(ctx => ctx.db.query('workPrompts').take(10)))).not.toContain('secret-test-key');
 });
 test('provider failures are sanitized and recorded as retryable failures', async () => {
@@ -56,8 +60,8 @@ test('AI history survives manual edits and commits retain source provenance', as
   vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'Original AI reply', response: { modelId: 'gemini-version-001' } } as never);
   await user.action(api.ai.reply, { chatId, text: 'Draft', model: 'gemini-2.5-flash', apiKey: 'secret-test-key' });
   const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
-  const commitId = await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Original', body: prompt.result, message: 'Snapshot' });
   await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Human revision' });
+  const commitId = await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Original', body: 'Human revision', message: 'Snapshot' });
   await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Second human revision' });
   const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
   expect(versions.page).toHaveLength(3);
@@ -70,7 +74,9 @@ test('AI history survives manual edits and commits retain source provenance', as
   expect(updated.provenance).toBeUndefined();
   await user.mutation(api.workspace.push, { commitId });
   const artifact = (await user.query(api.workspace.scope, { projectId, limit: 10 })).artifacts[0];
-  expect(artifact).toMatchObject({ body: 'Original AI reply', sourceVersionId: versions.page[2].id, sourceModel: { resolvedModel: 'gemini-version-001' } });
+  expect(artifact).toMatchObject({ body: 'Human revision', sourceVersionId: versions.page[1].id });
+  expect(artifact.sourceModel).toBeUndefined();
+  expect(updated.reply).toBe('Original AI reply');
   expect(JSON.stringify(await t.run(ctx => ctx.db.query('workResponseVersions').take(10)))).not.toContain('secret-test-key');
 });
 
@@ -111,4 +117,16 @@ test('legacy results are preserved without guessing provenance', async () => {
   const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
   expect(versions.page[1]).toMatchObject({ body: 'Old result', source: 'legacy' });
   expect(versions.page[1].provenance).toBeUndefined();
+});
+
+ test('only the chat author can save selected prompts', async () => {
+  const { user, chatId, t } = await setup();
+  const { promptId } = await user.mutation(internal.ai.begin, { chatId, text: 'Selected', model: 'gemini-test' });
+  const other = t.withIdentity({ subject: 'other' });
+  await other.mutation(api.users.syncCurrentUser, { name: 'Other', email: 'other@example.com' });
+  await expect(other.mutation(api.workspace.savePrompt, { promptId })).rejects.toThrow('private');
+  await user.mutation(api.workspace.savePrompt, { promptId });
+  await user.mutation(api.workspace.savePrompt, { promptId });
+  await user.mutation(internal.ai.finish, { promptId, result: 'Conversational reply', requestedModel: 'gemini-test' });
+  expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0]).toMatchObject({ saved: true, reply: 'Conversational reply', result: '' });
 });

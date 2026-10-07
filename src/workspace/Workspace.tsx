@@ -146,7 +146,7 @@ export default function Workspace({
     </div>
   );
   const scopedPrompts = data.prompts.filter(
-    (p) => p.projectId === (route.projectId || ""),
+    (p) => p.saved !== false && p.projectId === (route.projectId || ""),
   );
   const scopedArtifacts = data.artifacts.filter(
     (a) => a.projectId === route.projectId,
@@ -381,7 +381,7 @@ export default function Workspace({
                   ["Projects", data.projects.length, "Project"],
                   ["Conversations", data.chats.length, "Chat"],
                   ["Artifacts", data.artifacts.length, "Artifact"],
-                  ["Prompt history", data.prompts.length, "Prompt"],
+                  ["Prompt history", data.prompts.filter(p => p.saved !== false).length, "Prompt"],
                 ].map(([name, count, page]) => (
                   <button
                     key={name}
@@ -847,7 +847,7 @@ function ProjectView({
 }) {
   const [tab, setTab] = useState("Artifacts");
   const artifacts = data.artifacts.filter((a) => a.projectId === project.id);
-  const prompts = data.prompts.filter((p) => p.projectId === project.id);
+  const prompts = data.prompts.filter((p) => p.saved !== false && p.projectId === project.id);
   const chats = data.chats.filter((c) => c.projectId === project.id);
   const members = data.members.filter((m) => m.projectId === project.id);
   const canWrite = ["owner", "admin", "member"].includes(project.role);
@@ -1023,6 +1023,7 @@ function PromptList({
 }) {
   const [search, setSearch] = useState("");
   const rows = prompts
+    .filter(p => p.saved !== false)
     .filter((p) =>
       `${p.text} ${p.author}`.toLowerCase().includes(search.toLowerCase()),
     )
@@ -1097,7 +1098,7 @@ function PromptList({
       ) : (
         <Empty
           title={search ? "No matching prompts" : "No prompts yet"}
-          text="Prompts sent in project chats will appear here with their contributor and timestamp."
+          text="Use Save prompt in a project chat to keep selected prompts here with their contributor and timestamp."
         />
       )}
     </section>
@@ -1391,7 +1392,7 @@ function ChatView({
               <div className="chat-mark">✳</div>
               <h1>What are we working on?</h1>
               <p>
-                Start a thought. Shape a result. Commit something worth keeping.
+                Choose your model and chat. Save useful prompts, then attach results manually.
               </p>
               <div className="chat-suggestions">
                 <button onClick={() => setText("Help me explore ideas for ")}>
@@ -1414,6 +1415,13 @@ function ChatView({
                   <time>{date(p.createdAt)}</time>
                 </div>
                 <pre className="user-message">{p.text}</pre>
+                {p.reply && (
+                  <div className="result-message">
+                    <div className="message-meta"><span>✳</span><strong>{p.replyProvenance?.requestedModel || "AI reply"}</strong></div>
+                    <pre>{p.reply}</pre>
+                    {p.replyProvenance && <ModelDetails model={p.replyProvenance} />}
+                  </div>
+                )}
                 {p.result ? (
                   <div className="result-message">
                     <div className="message-meta">
@@ -1432,7 +1440,7 @@ function ChatView({
                   </div>
                 ) : (
                   <div className="connection-note">
-                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "Saved in your notebook. Select an AI model to generate replies, or attach a result below."}
+                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "No result attached. Attach results manually when you want to keep them."}
                   </div>
                 )}
                 {data.responseVersions.some(v => v.promptId === p.id) && (
@@ -1457,6 +1465,9 @@ function ChatView({
                 )}
                 {canWrite && p.status !== "generating" && (
                   <div className="message-actions">
+                    <button className="subtle" disabled={busy || p.saved !== false} onClick={() => void run(() => actions.savePrompt(p.id), "Prompt saved to your prompt library.")}>
+                      {p.saved !== false ? "✓ Prompt saved" : "Save prompt"}
+                    </button>
                     {p.status === "failed" && <button className="secondary" disabled={busy} onClick={() => setText(p.text)}>Retry prompt</button>}
                     <button
                       className="subtle"
@@ -1466,12 +1477,12 @@ function ChatView({
                     </button>
                     <button
                       className="secondary"
-                      disabled={!project}
+                      disabled={busy || !project || !p.result}
                       onClick={() => setCommitPrompt(p)}
                     >
                       ◇ Commit artifact
                     </button>
-                    {!project && <span>Choose a project to commit.</span>}
+                    {!project ? <span>Choose a project to commit.</span> : !p.result && <span>Attach a result before committing.</span>}
                   </div>
                 )}
               </article>
@@ -1504,17 +1515,18 @@ function ChatView({
                 {busy && ai ? "Generating…" : ai?.model.name || "Prompt notebook"} <small>· {ai ? ai.model.provider === "chatgpt" ? "ChatGPT plan" : "AI Studio key" : "save only"}</small>
               </span>
               <button
-                className="send-button"
+                className={ai ? "send-button" : "secondary"}
                 disabled={busy || !text.trim() || (ai?.model.provider === "gemini" && !ai.apiKey?.trim())}
-                aria-label="Send prompt"
+                aria-label={ai ? "Send message" : "Save prompt"}
               >
-                ↑
+                {ai ? "↑" : "Save prompt"}
               </button>
             </div>
             <p className="composer-hint">
               {project
                 ? "Prompts are shared with this project’s collaborators."
                 : "This chat stays outside projects until you choose one."}{" "}
+              Save selected prompts. Results must be attached manually.{" "}
               ⌘/Ctrl + Enter to send.
             </p>
           </form>

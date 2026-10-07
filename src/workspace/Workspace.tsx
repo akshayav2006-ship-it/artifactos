@@ -1,3 +1,5 @@
+import PolicySheets, { PolicySources } from "./PolicySheets";
+import { GoogleSources, GroundedText } from './GoogleSources';
 import AIControls from "./AIControls";
 import type { AIRequest, ModelProvenance } from "../../shared/ai";
 import { ConvexError } from "convex/values";
@@ -8,6 +10,7 @@ import type {
   Artifact,
   Commit,
   Data,
+  Member,
   Project,
   Prompt,
   Route,
@@ -327,6 +330,12 @@ export default function Workspace({
               </button>
             </div>
           )}
+          {(data.approvals || []).map((a) => (
+            <div className="invitation-banner" key={a.id}>
+              <span><strong>{a.title}</strong> by {a.author} in {a.projectName} needs your approval.</span>
+              <button className="primary" onClick={() => navigate({ page: "Artifact", projectId: a.projectId, artifactId: a.id })}>Review submission</button>
+            </div>
+          ))}
           {data.incoming.map((i) => (
             <div className="invitation-banner" key={i.id}>
               <span>
@@ -592,6 +601,7 @@ export default function Workspace({
                   ) : (
                     <ArtifactList
                       artifacts={scopedArtifacts}
+                      selectedArtifactId={route.artifactId}
                       project={project}
                       userId={userId}
                       actions={actions}
@@ -728,12 +738,12 @@ export default function Workspace({
                   Contributor — chat, commit, and push
                 </option>
                 <option value="admin">Admin — manage and verify</option>
-                <option value="reviewer">Reviewer — read project work</option>
+                <option value="reviewer">Reviewer — approve assigned submissions</option>
                 <option value="viewer">Viewer — read only</option>
               </select>
             </label>
             <p className="muted">
-              Only owners and admins can verify pushed artifacts.
+              Owners, admins, and designated reviewers can approve submissions.
             </p>
             <button disabled={busy || local} className="primary">
               Send invitation
@@ -1041,7 +1051,7 @@ function PromptList({
         />
       </div>
       <p className="muted">
-        Trust scores come from owner/admin reviews of pushed results.
+        Trust scores come from approver reviews of pushed results.
       </p>
       {rows.length ? (
         <div className="prompt-list">
@@ -1105,6 +1115,7 @@ function PromptList({
   );
 }
 function ArtifactList({
+  selectedArtifactId,
   artifacts,
   project,
   userId,
@@ -1113,6 +1124,7 @@ function ArtifactList({
   run,
   local,
 }: {
+  selectedArtifactId?: string;
   artifacts: Artifact[];
   project: Project;
   userId: string;
@@ -1123,7 +1135,7 @@ function ArtifactList({
 }) {
   const [filter, setFilter] = useState("all");
   const rows = artifacts
-    .filter((a) => filter === "all" || a.status === filter)
+    .filter((a) => a.id === selectedArtifactId || filter === "all" || a.status === filter)
     .sort((a, b) => b.createdAt - a.createdAt);
   return (
     <section className="panel library-panel">
@@ -1146,7 +1158,7 @@ function ArtifactList({
       </div>
       {rows.length ? (
         rows.map((a) => (
-          <details className="artifact-item" key={a.id}>
+          <details className="artifact-item" key={a.id} open={a.id === selectedArtifactId || undefined}>
             <summary>
               <span className="artifact-file-icon">◇</span>
               <span className="prompt-summary">
@@ -1168,6 +1180,18 @@ function ArtifactList({
                 <span>Commit {a.commitId.slice(-7)}</span>
                 <span>{a.message}</span>
               </div>
+              {a.status === "pending" && !local && a.approvers && (
+                <div className="review-help">
+                  {a.approvers.length ? <>Assigned approvers: {a.approvers.map(p => `${p.name} (${p.delivery === "not_configured" ? "email unavailable; notified in workspace" : p.delivery === "failed" ? "email failed; notified in workspace" : `email ${p.delivery}`})`).join(", ")}. {a.approvers.filter(p => p.decision === "verified").length}/{a.requiredApprovals ?? 1} approvals received. {a.requiredApprovals ? "Every required approver must approve." : "One assigned owner or admin review completes this request."}</> : "No eligible approvers are assigned. Add another project owner or admin to review this contribution."}
+                </div>
+              )}
+              {a.approvers?.filter(p => p.decision).map(p => (
+                <div className="review-record" key={p.userId}>
+                  <strong>{p.name}: {p.decision === "verified" ? "Approved" : "Changes requested"} · {p.score}/100</strong>
+                  <p>{p.feedback}</p>
+                  <small>{date(p.reviewedAt!)}</small>
+                </div>
+              ))}
               <pre className="artifact-body">{a.body}</pre>
               <button
                 className="subtle"
@@ -1186,7 +1210,7 @@ function ArtifactList({
               )}
               {a.status === "pending" &&
               !local &&
-              canReview(project.role, a.authorId, userId) ? (
+              canReview(project.role, a.authorId, userId) && (a.approvers?.length ? a.approvers.some(p => p.userId === userId && !p.decision) : a.requiredApprovals === undefined && project.role !== "reviewer") ? (
                 <form
                   className="review-form"
                   onSubmit={(e) => {
@@ -1247,8 +1271,8 @@ function ArtifactList({
                     {local
                       ? "Sign in to a shared project to have another owner or admin verify this artifact."
                       : a.authorId === userId
-                        ? "Another project owner or admin must verify your contribution."
-                        : "Waiting for a project owner or admin to verify this artifact."}
+                        ? "Your designated approvers must verify your contribution."
+                        : "Waiting for the remaining designated approvers to review this artifact."}
                   </p>
                 )
               )}
@@ -1258,7 +1282,7 @@ function ArtifactList({
       ) : (
         <Empty
           title="No pushed artifacts here yet"
-          text="Create a commit in a project chat, then push it for owner/admin verification."
+          text="Create a commit in a project chat, select it as the final version, then submit it for owner/admin verification."
         />
       )}
     </section>
@@ -1298,6 +1322,7 @@ function ChatView({
   const chat = data.chats.find((c) => c.id === route.chatId);
   const [projectId, setProjectId] = useState(route.projectId || "");
   const [text, setText] = useState("");
+  const [policySelection, setPolicySelection] = useState<{ projectId: string; ids: string[] }>({ projectId: "", ids: [] });
   const [commitPrompt, setCommitPrompt] = useState<Prompt | null>(null);
   const [resultPrompt, setResultPrompt] = useState<Prompt | null>(null);
   const [showCommits, setShowCommits] = useState(true);
@@ -1327,7 +1352,7 @@ function ChatView({
           chatId: id,
           projectId: projectId || undefined,
         });
-        await actions.sendPrompt(id, message, ai);
+        await actions.sendPrompt(id, message, ai ? { ...ai, policyIds: policySelection.projectId === project?.id ? policySelection.ids : [] } : undefined);
       },
       ai ? undefined : local
         ? "Prompt saved on this device."
@@ -1386,6 +1411,7 @@ function ChatView({
             Project is fixed after the first commit to preserve its history.
           </p>
         )}
+        {project && <PolicySheets key={project.id} projectId={project.id} actions={actions} canWrite={canWrite && !busy} selected={policySelection.projectId === project.id ? policySelection.ids : []} select={ids => setPolicySelection({ projectId: project.id, ids })} />}
         <div className="chat-messages">
           {!prompts.length ? (
             <div className="chat-welcome">
@@ -1418,7 +1444,7 @@ function ChatView({
                 {p.reply && (
                   <div className="result-message">
                     <div className="message-meta"><span>✳</span><strong>{p.replyProvenance?.requestedModel || "AI reply"}</strong></div>
-                    <pre>{p.reply}</pre>
+                    <GroundedText text={p.reply} grounding={p.replyProvenance?.grounding} />
                     {p.replyProvenance && <ModelDetails model={p.replyProvenance} />}
                   </div>
                 )}
@@ -1435,7 +1461,7 @@ function ChatView({
                           : "Not scored"}
                       </span>
                     </div>
-                    <pre>{p.result}</pre>
+                    <GroundedText text={p.result} grounding={p.provenance?.grounding} />
                     {p.provenance && <ModelDetails model={p.provenance} />}
                   </div>
                 ) : (
@@ -1458,7 +1484,7 @@ function ChatView({
                           </div>
                           {version.provenance && <ModelDetails model={version.provenance} />}
                           {version.source === "legacy" && <p className="muted">Preserved before replacement; original source and response time are unknown.</p>}
-                          <pre>{version.body}</pre>
+                          <GroundedText text={version.body} grounding={version.provenance?.grounding} />
                         </section>
                       ))}
                   </details>
@@ -1544,22 +1570,25 @@ function ChatView({
             <span className="count-pill">{commits.length}</span>
           </div>
           <p className="muted">
-            Save snapshots here. Push each one when it’s ready for review.
+            Save snapshots, select one final version for this chat, then submit it for review.
           </p>
           {commits.length ? (
             commits.map((c) => (
               <CommitCard
                 key={c.id}
                 commit={c}
+                approvers={local ? undefined : data.members.filter(m => m.projectId === c.projectId && m.id !== c.authorId && ["owner", "admin", "reviewer"].includes(m.role))}
+                isFinal={chat.finalCommitId === c.id}
+                selectFinal={() => run(() => actions.selectFinal(c.id), "Final version selected.")}
                 pushed={
                   !!c.pushed || data.artifacts.some((a) => a.commitId === c.id)
                 }
                 canWrite={canWrite}
                 busy={busy}
-                push={() =>
+                push={(approverIds) =>
                   run(
-                    () => actions.push(c.id),
-                    "Artifact pushed. It is now awaiting owner/admin verification.",
+                    () => actions.push(c.id, approverIds),
+                    local ? "Final version submitted locally. Sign in to a shared project to request approval." : "Final version submitted. All selected approvers must approve; email status is shown on the artifact.",
                   )
                 }
               />
@@ -1629,7 +1658,7 @@ function ChatView({
           >
             <p className="muted">
               A commit is a fixed snapshot. Create as many as you need; only
-              pushed commits enter the artifact library.
+              the selected final version can be submitted to the artifact library.
             </p>
             <label>
               Artifact name
@@ -1671,17 +1700,26 @@ function ChatView({
 }
 function CommitCard({
   commit,
+  approvers,
+  isFinal,
+  selectFinal,
   pushed,
   canWrite,
   busy,
   push,
 }: {
   commit: Commit;
+  approvers?: Member[];
+  isFinal: boolean;
+  selectFinal: () => Promise<boolean>;
   pushed: boolean;
   canWrite: boolean;
   busy: boolean;
-  push: () => Promise<boolean>;
+  push: (approverIds?: string[]) => Promise<boolean>;
 }) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const eligibleIds = new Set(approvers?.map(m => m.id));
+  const requiredIds = selected.filter(id => eligibleIds.has(id));
   return (
     <div className="commit-card">
       <div className="commit-card-title">
@@ -1696,16 +1734,33 @@ function CommitCard({
         <summary>View snapshot · {commit.id.slice(-7)}</summary>
         {commit.sourceVersionId && <p>Source response · {commit.sourceVersionId.slice(-7)}</p>}
         {commit.sourceModel && <><p>Source model</p><ModelDetails model={commit.sourceModel} /></>}
-        <pre>{commit.body}</pre>
+        <GroundedText text={commit.body} grounding={commit.sourceModel?.grounding} />
       </details>
-      {pushed ? (
-        <span className="pushed-label">✓ Pushed for review</span>
-      ) : canWrite ? (
-        <button className="secondary" disabled={busy} onClick={push}>
-          ↑ Push artifact
+      {isFinal && <span className="final-version-label">✓ Final version</span>}
+      {canWrite && !isFinal && (
+        <button className="secondary" disabled={busy} onClick={selectFinal}>
+          Select as final version
         </button>
+      )}
+      {pushed ? (
+        <span className="pushed-label">✓ Submitted for review</span>
+      ) : canWrite ? (
+        <>
+          {approvers && isFinal && <fieldset disabled={busy}>
+            <legend>Required approvers</legend>
+            <p className="muted">Select everyone who must approve this submission.</p>
+            {approvers.map(m => <label key={m.id}>
+              <input type="checkbox" checked={requiredIds.includes(m.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, m.id] : ids.filter(id => id !== m.id))} />
+              {m.name} ({m.role})
+            </label>)}
+            {!approvers.length && <p className="muted">Add another owner, admin, or reviewer before submitting.</p>}
+          </fieldset>}
+          <button className="secondary" disabled={busy || !isFinal || (!!approvers && !requiredIds.length)} onClick={() => void push(approvers ? requiredIds : undefined)}>
+            ↑ Submit final version
+          </button>
+        </>
       ) : (
-        <span className="muted">Not pushed</span>
+        <span className="muted">Not submitted</span>
       )}
     </div>
   );
@@ -1715,5 +1770,7 @@ function ModelDetails({ model }: { model: ModelProvenance }) {
   return <div className="model-provenance">
     <span>{model.provider === "gemini" ? "Gemini" : "ChatGPT"} · Requested: {model.requestedModel}</span>
     <span>Reported model/version: {model.resolvedModel || "Not provided"}</span>
+    <GoogleSources grounding={model.grounding} />
+    <PolicySources citations={model.policyCitations} />
   </div>;
 }

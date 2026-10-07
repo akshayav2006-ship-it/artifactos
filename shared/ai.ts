@@ -1,5 +1,6 @@
+import type { PolicyCitation } from "./policies.ts";
 export type AIModel = { id: string; name: string; provider: 'gemini' | 'chatgpt' };
-export type AIRequest = { model: AIModel; apiKey?: string };
+export type AIRequest = { model: AIModel; apiKey?: string; googleSearch?: boolean; policyIds?: string[] };
 export const geminiModels: AIModel[] = [
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini' },
   { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', provider: 'gemini' },
@@ -9,8 +10,10 @@ export type ModelProvenance = {
   provider: 'gemini' | 'chatgpt';
   requestedModel: string;
   resolvedModel?: string;
+  grounding?: GoogleGrounding;
+  policyCitations?: PolicyCitation[];
 };
-export type AIReply = { text: string; resolvedModel?: string };
+export type AIReply = { text: string; resolvedModel?: string; grounding?: GoogleGrounding };
 
 // The SDK falls back to the requested ID when provider metadata is absent.
 // Do not present that fallback as an independently reported model version.
@@ -23,4 +26,54 @@ export function reportedModel(response: { modelId?: string; body?: unknown } | u
     }
   }
   return response?.modelId && response.modelId !== requested ? response.modelId : undefined;
+}
+
+export type GoogleGrounding = {
+  sources: { url: string; title: string }[];
+  supports: { text: string; sourceIndices: number[] }[];
+  searchQueries: string[];
+  searchEntryPoint?: string;
+};
+
+export function safeSourceUrl(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  try { return ['https:', 'http:'].includes(new URL(value).protocol); }
+  catch { return false; }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+// Keep only provider-reported web sources; never infer citations from answer text.
+export function googleGrounding(metadata: unknown): GoogleGrounding | undefined {
+  const grounding = record(record(record(metadata).google).groundingMetadata);
+  if (!Object.keys(grounding).length) return undefined;
+  const sources: GoogleGrounding['sources'] = [];
+  const chunkIndices = new Map<number, number>();
+  const chunks = Array.isArray(grounding.groundingChunks) ? grounding.groundingChunks : [];
+  chunks.forEach((chunk, index) => {
+    const web = record(record(chunk).web);
+    if (!safeSourceUrl(web.uri)) return;
+    let sourceIndex = sources.findIndex(source => source.url === web.uri);
+    if (sourceIndex < 0) {
+      sourceIndex = sources.length;
+      sources.push({ url: web.uri, title: typeof web.title === 'string' && web.title.trim() ? web.title : new URL(web.uri).hostname });
+    }
+    chunkIndices.set(index, sourceIndex);
+  });
+  const supports: GoogleGrounding['supports'] = [];
+  for (const item of Array.isArray(grounding.groundingSupports) ? grounding.groundingSupports : []) {
+    const support = record(item);
+    const text = record(support.segment).text;
+    const indices = Array.isArray(support.groundingChunkIndices) ? support.groundingChunkIndices : [];
+    const sourceIndices = [...new Set(indices.flatMap(index => typeof index === 'number' && chunkIndices.has(index) ? [chunkIndices.get(index)!] : []))];
+    if (typeof text === 'string' && text && sourceIndices.length) supports.push({ text, sourceIndices });
+  }
+  const entry = record(grounding.searchEntryPoint).renderedContent;
+  return {
+    sources, supports,
+    searchQueries: Array.isArray(grounding.webSearchQueries) ? grounding.webSearchQueries.filter((query): query is string => typeof query === 'string') : [],
+    ...(typeof entry === 'string' && entry ? { searchEntryPoint: entry } : {}),
+  };
 }

@@ -56,7 +56,7 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
       <label>Model
         <select aria-label="AI model" disabled={busy} value={value ? `${value.model.provider}:${value.model.id}` : ''} onChange={e => {
           const model = models.find(m => `${m.provider}:${m.id}` === e.target.value);
-          onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined } : undefined);
+          onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined, googleSearch: model.provider === 'gemini' ? value?.googleSearch : undefined } : undefined);
         }}>
           <option value="">Notebook · save only</option>
           <optgroup label="Google Gemini · AI Studio key">
@@ -69,6 +69,11 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
       </label>
       <button type="button" className="subtle" aria-expanded={open} onClick={() => setOpen(!open)}>⚙ AI connections</button>
     </div>
+    {value?.model.provider === 'gemini' && <label className="google-search-toggle">
+      <input type="checkbox" checked={value.googleSearch ?? false} disabled={busy} onChange={e => onChange({ ...value, googleSearch: e.target.checked })} />
+      Ground with Google Search
+      <small>Searches when useful and includes sources. Search usage may incur charges.</small>
+    </label>}
     {open && <div className="ai-connections">
       <div>
         <strong>Gemini · test with a free-tier key</strong>
@@ -83,7 +88,7 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
         <label>Other Gemini model ID
           <div className="ai-picker-row"><input placeholder="gemini-…" value={custom} onChange={e => setCustom(e.target.value)} /><button type="button" className="secondary" disabled={busy || !/^gemini-[a-z0-9.-]+$/.test(custom)} onClick={() => {
             const model: AIModel = { id: custom, name: custom, provider: 'gemini' };
-            setModels(current => [...current.filter(m => m.id !== custom), model]); onChange({ model, apiKey: key });
+            setModels(current => [...current.filter(m => m.id !== custom), model]); onChange({ model, apiKey: key, googleSearch: value?.googleSearch });
           }}>Use model</button></div>
         </label>
       </div>

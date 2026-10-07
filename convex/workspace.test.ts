@@ -77,6 +77,7 @@ async function setup() {
     body: "Original findings",
     message: "First draft",
   });
+  await member.mutation(api.workspace.selectFinal, { commitId });
   return {
     t,
     owner,
@@ -85,6 +86,7 @@ async function setup() {
     outsider,
     ownerId,
     memberId,
+    reviewerId,
     projectId,
     chatId,
     promptId,
@@ -92,6 +94,34 @@ async function setup() {
   };
 }
 describe("project contribution workflow", () => {
+  test("only the contributor can select one final version and submit that snapshot", async () => {
+    const s = await setup();
+    const secondId = await s.member.mutation(api.workspace.commit, {
+      chatId: s.chatId, promptId: s.promptId,
+      title: "Revised findings", body: "Second snapshot", message: "Revision",
+    });
+    await expect(s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: secondId }))
+      .rejects.toThrow("final version");
+    await expect(s.owner.mutation(api.workspace.selectFinal, { commitId: secondId }))
+      .rejects.toThrow("chat author");
+    await expect(s.reviewer.mutation(api.workspace.selectFinal, { commitId: secondId }))
+      .rejects.toThrow("permission");
+    await expect(s.outsider.mutation(api.workspace.selectFinal, { commitId: secondId }))
+      .rejects.toThrow("access");
+    await s.member.mutation(api.workspace.selectFinal, { commitId: secondId });
+    await expect(s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: s.commitId }))
+      .rejects.toThrow("final version");
+    const artifactId = await s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: secondId });
+    await s.member.mutation(api.workspace.selectFinal, { commitId: s.commitId });
+    const chats = await s.member.query(api.workspace.chats, { projectId: s.projectId });
+    expect(chats[0].finalCommitId).toBe(s.commitId);
+    const scope = await s.member.query(api.workspace.scope, {
+      projectId: s.projectId, chatId: s.chatId, limit: 100,
+    });
+    expect(scope.chats[0].finalCommitId).toBe(s.commitId);
+    expect(scope.artifacts).toHaveLength(1);
+    expect(scope.artifacts[0]).toMatchObject({ id: artifactId, commitId: secondId, body: "Second snapshot" });
+  });
   test("commits remain snapshots, pushes enter the library, and owner review records provenance", async () => {
     const s = await setup();
     const before = await s.owner.query(api.workspace.scope, {
@@ -104,7 +134,7 @@ describe("project contribution workflow", () => {
       result: "Changed result",
     });
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [s.ownerId], commitId: s.commitId,
     });
     await s.owner.mutation(api.workspace.review, {
       artifactId,
@@ -129,7 +159,7 @@ describe("project contribution workflow", () => {
   test("members, reviewers, and outsiders cannot verify; authors cannot self-verify even as admin", async () => {
     const s = await setup();
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [s.ownerId], commitId: s.commitId,
     });
     const args = {
       artifactId,
@@ -162,10 +192,10 @@ describe("project contribution workflow", () => {
   test("duplicate pushes and repeated reviews are rejected", async () => {
     const s = await setup();
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [s.ownerId], commitId: s.commitId,
     });
     await expect(
-      s.member.mutation(api.workspace.push, { commitId: s.commitId }),
+      s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: s.commitId }),
     ).rejects.toThrow("already been pushed");
     await s.owner.mutation(api.workspace.review, {
       artifactId,
@@ -233,7 +263,7 @@ describe("project contribution workflow", () => {
   test("review scores require finite integers from zero to one hundred", async () => {
     const s = await setup();
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [s.ownerId], commitId: s.commitId,
     });
     for (const score of [-1, 101, 4.5])
       await expect(
@@ -266,7 +296,7 @@ describe("project contribution workflow", () => {
   test("prompt scores include review provenance independently of artifact pagination", async () => {
     const s = await setup();
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [s.ownerId], commitId: s.commitId,
     });
     await s.owner.mutation(api.workspace.review, {
       artifactId,
@@ -298,7 +328,7 @@ describe("project contribution workflow", () => {
     });
     await s.outsider.mutation(api.team.acceptInvitation, { invitationId: id });
     const artifactId = await s.member.mutation(api.workspace.push, {
-      commitId: s.commitId,
+      approverIds: [(await s.outsider.query(api.users.current, {}))!._id], commitId: s.commitId,
     });
     await s.outsider.mutation(api.workspace.review, {
       artifactId,
@@ -410,5 +440,136 @@ describe("project contribution workflow", () => {
     await expect(
       s.owner.query(internal.email.pendingForRetry, args),
     ).rejects.toThrow("already been sent");
+  });
+});
+
+describe("submission approval requests", () => {
+  test("notifies designated owners/admins, excludes the author and unassigned roles, and resolves requests on changes", async () => {
+    const s = await setup();
+    const admin = s.t.withIdentity({ subject: "admin", email: "admin@example.com", emailVerified: true });
+    const adminId = await admin.mutation(api.users.syncCurrentUser, { name: "Admin", email: "admin@example.com" });
+    await s.t.run(async ctx => {
+      await ctx.db.insert("projectMembers", { projectId: s.projectId, userId: adminId, role: "admin", joinedAt: 0 });
+      const membership = await ctx.db.query("projectMembers").withIndex("by_project_id_and_user_id", q => q.eq("projectId", s.projectId).eq("userId", s.memberId)).unique();
+      await ctx.db.patch(membership!._id, { role: "admin" });
+    });
+    const artifactId = await s.member.mutation(api.workspace.push, { approverIds: [s.ownerId, adminId], commitId: s.commitId });
+    const requests = await s.t.run(ctx => ctx.db.query("approvalRequests").withIndex("by_artifactId", q => q.eq("artifactId", artifactId)).take(100));
+    expect(requests.map(r => r.userId).sort()).toEqual([s.ownerId, adminId].sort());
+    expect(requests.every(r => r.delivery === "queued" && !r.resolved)).toBe(true);
+    expect(await s.owner.query(api.approvals.mine, {})).toEqual([expect.objectContaining({ id: artifactId, title: "Findings", projectName: "Research" })]);
+    expect(await s.member.query(api.approvals.mine, {})).toEqual([]);
+    expect(await s.reviewer.query(api.approvals.mine, {})).toEqual([]);
+    await expect(s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: s.commitId })).rejects.toThrow("already been pushed");
+    expect(await s.t.run(ctx => ctx.db.query("approvalRequests").take(100))).toHaveLength(2);
+    await s.owner.mutation(api.workspace.review, { artifactId, decision: "changes_requested", score: 65, feedback: "Revise sources" });
+    expect(await admin.query(api.approvals.mine, {})).toEqual([]);
+    expect(await s.owner.query(api.approvals.mine, {})).toEqual([]);
+    expect((await s.t.run(ctx => ctx.db.query("approvalRequests").take(100))).every(r => r.resolved)).toBe(true);
+    expect(await s.t.query(internal.approvals.getDelivery, { requestId: requests[0]._id })).toBeNull();
+  });
+
+  test("all designated people must approve, reviewers can approve, and duplicate or unassigned reviews fail", async () => {
+    const s = await setup();
+    const artifactId = await s.member.mutation(api.workspace.push, { commitId: s.commitId, approverIds: [s.ownerId, s.reviewerId] });
+    expect(await s.reviewer.query(api.approvals.mine, {})).toHaveLength(1);
+    const request = (await s.t.run(ctx => ctx.db.query("approvalRequests").take(100))).find(r => r.userId === s.reviewerId)!;
+    expect(await s.t.query(internal.approvals.getDelivery, { requestId: request._id })).toMatchObject({ email: "reviewer@example.com", requiredApprovals: 2 });
+    await s.reviewer.mutation(api.workspace.review, { artifactId, decision: "verified", score: 80, feedback: "Sources checked" });
+    expect(await s.reviewer.query(api.approvals.mine, {})).toEqual([]);
+    expect(await s.owner.query(api.approvals.mine, {})).toHaveLength(1);
+    expect(await s.owner.query(api.approvals.artifact, { artifactId })).toMatchObject({ status: "pending", requiredApprovals: 2, approvers: expect.arrayContaining([expect.objectContaining({ userId: s.reviewerId, decision: "verified", score: 80, feedback: "Sources checked" })]) });
+    await expect(s.reviewer.mutation(api.workspace.review, { artifactId, decision: "verified", score: 100, feedback: "Again" })).rejects.toThrow("already reviewed");
+    await s.owner.mutation(api.workspace.review, { artifactId, decision: "verified", score: 90, feedback: "Approved" });
+    expect(await s.owner.query(api.approvals.artifact, { artifactId })).toMatchObject({ status: "verified", score: 85 });
+    expect(await s.owner.query(api.approvals.mine, {})).toEqual([]);
+  });
+
+  test("concurrent approvals preserve both reviews and verify only after all required people approve", async () => {
+    const s = await setup();
+    const artifactId = await s.member.mutation(api.workspace.push, { commitId: s.commitId, approverIds: [s.ownerId, s.reviewerId] });
+    await Promise.all([
+      s.owner.mutation(api.workspace.review, { artifactId, decision: "verified", score: 91, feedback: "Owner checked" }),
+      s.reviewer.mutation(api.workspace.review, { artifactId, decision: "verified", score: 80, feedback: "Reviewer checked" }),
+    ]);
+    const artifact = await s.owner.query(api.approvals.artifact, { artifactId });
+    expect(artifact).toMatchObject({ status: "verified", score: 86 });
+    expect(artifact!.approvers!.filter(p => p.decision === "verified")).toHaveLength(2);
+    expect(await s.owner.query(api.approvals.mine, {})).toEqual([]);
+    expect(await s.reviewer.query(api.approvals.mine, {})).toEqual([]);
+  });
+
+  test("a request for changes stops approval after an earlier approval", async () => {
+    const s = await setup();
+    const artifactId = await s.member.mutation(api.workspace.push, { commitId: s.commitId, approverIds: [s.ownerId, s.reviewerId] });
+    await s.owner.mutation(api.workspace.review, { artifactId, decision: "verified", score: 90, feedback: "Approved" });
+    await s.reviewer.mutation(api.workspace.review, { artifactId, decision: "changes_requested", score: 50, feedback: "Fix references" });
+    expect(await s.owner.query(api.approvals.artifact, { artifactId })).toMatchObject({ status: "changes_requested", score: 50, feedback: "Fix references" });
+    expect((await s.t.run(ctx => ctx.db.query("approvalRequests").take(100))).every(r => r.resolved)).toBe(true);
+  });
+
+  test("validates required approvers and rejects unassigned admins and removed reviewers", async () => {
+    const s = await setup();
+    for (const approverIds of [undefined, [], [s.ownerId, s.ownerId], [s.memberId]]) {
+      await expect(s.member.mutation(api.workspace.push, { commitId: s.commitId, approverIds })).rejects.toThrow(/approver/);
+    }
+    expect(await s.t.run(ctx => ctx.db.query("workArtifacts").take(100))).toEqual([]);
+    expect(await s.t.run(ctx => ctx.db.query("approvalRequests").take(100))).toEqual([]);
+    const artifactId = await s.member.mutation(api.workspace.push, { commitId: s.commitId, approverIds: [s.reviewerId] });
+    await expect(s.owner.mutation(api.workspace.review, { artifactId, decision: "verified", score: 90, feedback: "Unassigned" })).rejects.toThrow("designated");
+    await s.t.run(async ctx => {
+      const membership = await ctx.db.query("projectMembers").withIndex("by_project_id_and_user_id", q => q.eq("projectId", s.projectId).eq("userId", s.reviewerId)).unique();
+      await ctx.db.patch(membership!._id, { role: "viewer" });
+    });
+    expect(await s.reviewer.query(api.approvals.mine, {})).toEqual([]);
+    await expect(s.reviewer.mutation(api.workspace.review, { artifactId, decision: "verified", score: 90, feedback: "Removed" })).rejects.toThrow("permission");
+    expect(await s.owner.query(api.approvals.artifact, { artifactId })).toMatchObject({ status: "pending" });
+  });
+
+  test("Resend delivers submission details once and records missing configuration and failures", async () => {
+    const s = await setup();
+    await s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: s.commitId });
+    const request = (await s.t.run(ctx => ctx.db.query("approvalRequests").take(1)))[0];
+    const fetchMail = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMail);
+    vi.stubEnv("EMAIL_PROVIDER", "resend");
+    vi.stubEnv("APP_URL", "https://example.com");
+    vi.stubEnv("RESEND_API_KEY", "");
+    try {
+      await s.t.action(internal.approvals.deliver, { requestId: request._id });
+      expect(fetchMail).not.toHaveBeenCalled();
+      expect((await s.t.run(ctx => ctx.db.get(request._id)))?.delivery).toBe("not_configured");
+      expect(await s.owner.query(api.approvals.mine, {})).toHaveLength(1);
+      vi.stubEnv("RESEND_API_KEY", "test-key");
+      vi.stubEnv("INVITE_FROM_EMAIL", "app@example.com");
+      fetchMail.mockResolvedValueOnce({ ok: false });
+      await s.t.action(internal.approvals.deliver, { requestId: request._id });
+      expect((await s.t.run(ctx => ctx.db.get(request._id)))?.delivery).toBe("failed");
+      await s.t.action(internal.approvals.deliver, { requestId: request._id });
+      const payload = JSON.parse(fetchMail.mock.calls[1][1].body);
+      expect(payload.to).toEqual(["owner@example.com"]);
+      expect(payload.subject).toBe("Approval requested: Findings");
+      expect(payload.text).toContain("Contributor");
+      expect(payload.text).toContain("Research");
+      expect((await s.t.run(ctx => ctx.db.get(request._id)))?.delivery).toBe("sent");
+      await s.t.action(internal.approvals.deliver, { requestId: request._id });
+      expect(fetchMail).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("removed approvers cannot see requests or receive mail and outsiders cannot open artifacts", async () => {
+    const s = await setup();
+    const artifactId = await s.member.mutation(api.workspace.push, { approverIds: [s.ownerId], commitId: s.commitId });
+    await expect(s.outsider.query(api.approvals.artifact, { artifactId })).rejects.toThrow("access");
+    const request = (await s.t.run(ctx => ctx.db.query("approvalRequests").take(1)))[0];
+    await s.t.run(async ctx => {
+      const membership = await ctx.db.query("projectMembers").withIndex("by_project_id_and_user_id", q => q.eq("projectId", s.projectId).eq("userId", s.ownerId)).unique();
+      await ctx.db.patch(membership!._id, { role: "viewer" });
+    });
+    expect(await s.owner.query(api.approvals.mine, {})).toEqual([]);
+    expect(await s.t.query(internal.approvals.getDelivery, { requestId: request._id })).toBeNull();
   });
 });

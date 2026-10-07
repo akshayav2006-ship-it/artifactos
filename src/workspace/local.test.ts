@@ -18,9 +18,17 @@ test("multiple local commits are independent and only pushed commits become arti
   await a.commit(chat, prompt.id, "Draft A", "First result", "Initial draft");
   await a.commit(chat, prompt.id, "Draft B", "Better result", "Refinement");
   expect(data.artifacts).toHaveLength(0);
+  await expect(a.push(data.commits[1].id)).rejects.toThrow("final version");
+  await a.selectFinal(data.commits[1].id);
   await a.push(data.commits[1].id);
   expect(data.artifacts).toHaveLength(1);
   expect(data.artifacts[0].body).toBe("First result");
+  await a.selectFinal(data.commits[0].id);
+  expect(data.chats[0].finalCommitId).toBe(data.commits[0].id);
+  expect(data.artifacts[0].body).toBe("First result");
+  const reloaded = structuredClone(data);
+  const reloadedActions = localActions(() => reloaded, () => {});
+  await expect(reloadedActions.push(data.commits[1].id)).rejects.toThrow("already been pushed");
   expect(data.prompts[0].projectId).toBe(project);
   await expect(a.assignChat(chat, "")).rejects.toThrow("locked");
   await expect(
@@ -35,12 +43,15 @@ test('local AI sends conversation context and stores provider replies without cr
   const chat = await a.createChat('', 'AI chat');
   await a.sendPrompt(chat, 'First question');
   await a.addResult(data.prompts[0].id, 'First answer');
-  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ text: 'Second answer' }), { headers: { 'Content-Type': 'application/json' } }));
+  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ text: 'Second answer', grounding: { sources: [{ url: 'https://example.com', title: 'Example' }], supports: [], searchQueries: ['query'] } }), { headers: { 'Content-Type': 'application/json' } }));
   try {
-    await a.sendPrompt(chat, 'Follow up', { model: { id: 'gemini-2.5-flash', name: 'Gemini', provider: 'gemini' }, apiKey: 'private-key' });
+    await a.sendPrompt(chat, 'Follow up', { model: { id: 'gemini-2.5-flash', name: 'Gemini', provider: 'gemini' }, apiKey: 'private-key', googleSearch: true });
     expect(JSON.parse(String(request.mock.calls[0][1]?.body)).messages).toEqual([
       { role: 'user', content: 'First question' }, { role: 'assistant', content: 'First answer' }, { role: 'user', content: 'Follow up' },
     ]);
+    expect(JSON.parse(String(request.mock.calls[0][1]?.body)).googleSearch).toBe(true);
+    expect(data.prompts[1].replyProvenance?.grounding?.sources[0].title).toBe('Example');
+    expect(data.responseVersions[0].provenance?.grounding).toEqual(data.prompts[1].replyProvenance?.grounding);
     expect(data.prompts[1]).toMatchObject({ status: 'complete', reply: 'Second answer', result: '', saved: false, model: 'Gemini' });
     await a.savePrompt(data.prompts[1].id);
     expect(data.prompts[1]).toMatchObject({ saved: true, result: '' });
@@ -94,4 +105,30 @@ test('local AI and manual versions survive edits, commits, and reloads', async (
     await a.addResult(data.prompts[0].id, 'Migrated revision');
     expect(data.responseVersions[1]).toMatchObject({ source: 'legacy', body: 'Second revision' });
   } finally { request.mockRestore(); vi.unstubAllGlobals(); }
+});
+
+test('local policy sheets search only their project and retain cited excerpts in AI history', async () => {
+  const { vi } = await import('vitest');
+  let data = structuredClone(emptyData);
+  const actions = localActions(() => data, next => { data = next; });
+  const projectId = await actions.createProject('Policies', '');
+  const otherId = await actions.createProject('Other project', '');
+  await actions.importPolicies(projectId, { sheet: 'HR.csv', rows: [{ row: 2, text: 'Annual leave is 20 days.' }] });
+  await actions.importPolicies(otherId, { sheet: 'Other.csv', rows: [{ row: 1, text: 'Other leave policy.' }] });
+  const policies = await actions.searchPolicies(projectId, 'leave');
+  expect(policies).toHaveLength(1);
+  const chatId = await actions.createChat(projectId, 'Leave');
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: '20 days [P1].', resolvedModel: 'test' }), { headers: { 'content-type': 'application/json' } }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const ai = { model: { id: 'gemini-test', name: 'Test', provider: 'gemini' as const }, apiKey: 'key', policyIds: [policies[0].id] };
+    await actions.sendPrompt(chatId, 'How much leave?', ai);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[0].content).toContain('Annual leave is 20 days.');
+    expect(data.prompts[0].replyProvenance?.policyCitations?.[0]).toMatchObject({ sheet: 'HR.csv', row: 2, text: 'Annual leave is 20 days.' });
+    await actions.addResult(data.prompts[0].id, 'Human revision');
+    expect(data.responseVersions.find(version => version.source === 'ai')?.provenance?.policyCitations).toHaveLength(1);
+    const foreign = (await actions.searchPolicies(otherId, 'leave'))[0];
+    await expect(actions.sendPrompt(chatId, 'Leak', { ...ai, policyIds: [foreign.id] })).rejects.toThrow('unavailable');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally { vi.unstubAllGlobals(); }
 });

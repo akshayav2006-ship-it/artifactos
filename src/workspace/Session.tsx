@@ -11,6 +11,7 @@ import {
   ConvexReactClient,
   useAction,
   useConvexAuth,
+  useConvex,
   useMutation,
   usePaginatedQuery,
   useQuery,
@@ -264,6 +265,10 @@ function Remote({
       : "skip",
   );
   const incoming = useQuery(api.team.listMyInvitations, {});
+  const approvals = useQuery(api.approvals.mine, {});
+  const requestedArtifact = useQuery(api.approvals.artifact, route.artifactId ? { artifactId: route.artifactId as Id<"workArtifacts"> } : "skip");
+  const convex = useConvex();
+  const importPolicies = useMutation(api.policies.importSheet);
   const createProject = useMutation(api.projects.create);
   const createChat = useMutation(api.workspace.createChat);
   const assign = useMutation(api.workspace.assignChat);
@@ -272,11 +277,14 @@ function Remote({
   const savePrompt = useMutation(api.workspace.savePrompt);
   const result = useMutation(api.workspace.addResult);
   const commit = useMutation(api.workspace.commit);
+  const selectFinal = useMutation(api.workspace.selectFinal);
   const push = useMutation(api.workspace.push);
   const review = useMutation(api.workspace.review);
   const invite = useAction(api.email.invite);
   const accept = useMutation(api.team.acceptInvitation);
   const actions: Actions = {
+    importPolicies: async (projectId, input) => { await importPolicies({ projectId: projectId as Id<"projects">, ...input }); },
+    searchPolicies: (projectId, text) => convex.query(api.policies.search, { projectId: projectId as Id<"projects">, text }),
     createProject: (name, description) => createProject({ name, description }),
     createChat: (projectId, title) =>
       createChat({
@@ -292,7 +300,7 @@ function Remote({
     sendPrompt: async (chatId, text, ai) => {
       if (ai) {
         if (ai.model.provider !== "gemini") throw new Error("ChatGPT subscription access is available in the local workspace.");
-        await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, apiKey: ai.apiKey || "" });
+        await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, apiKey: ai.apiKey || "", googleSearch: ai.googleSearch, policyIds: ai.policyIds as Id<"policyRows">[] | undefined });
       } else await send({ chatId: chatId as Id<"workChats">, text });
     },
     savePrompt: async (promptId) => {
@@ -310,8 +318,11 @@ function Remote({
         message,
       });
     },
-    push: async (commitId) => {
-      await push({ commitId: commitId as Id<"workCommits"> });
+    selectFinal: async (commitId) => {
+      await selectFinal({ commitId: commitId as Id<"workCommits"> });
+    },
+    push: async (commitId, approverIds) => {
+      await push({ commitId: commitId as Id<"workCommits">, approverIds: approverIds as Id<"users">[] | undefined });
     },
     review: async (artifactId, decision, score, feedback) => {
       await review({
@@ -339,7 +350,8 @@ function Remote({
     chats: chats || [],
     prompts: promptPages.results,
     commits: commitPages.results,
-    artifacts: artifactPages.results,
+    approvals: approvals || [],
+    artifacts: requestedArtifact && !artifactPages.results.some(a => a.id === requestedArtifact.id) ? [requestedArtifact, ...artifactPages.results] : artifactPages.results,
     members: (members || []).map((m) => ({
       id: m.userId,
       projectId: projectId!,

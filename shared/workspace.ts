@@ -1,3 +1,4 @@
+import type { PolicyRow, PolicyImport } from "./policies";
 import type { AIRequest, ModelProvenance } from "./ai";
 export type Role = "owner" | "admin" | "member" | "reviewer" | "viewer";
 export type Project = {
@@ -8,6 +9,7 @@ export type Project = {
   ownerId: string;
 };
 export type Chat = {
+  finalCommitId?: string;
   id: string;
   title: string;
   projectId: string;
@@ -57,6 +59,8 @@ export type Commit = {
   createdAt: number;
 };
 export type Artifact = {
+  requiredApprovals?: number;
+  approvers?: { userId: string; name: string; delivery: "queued" | "sent" | "failed" | "not_configured"; decision?: "verified" | "changes_requested"; score?: number; feedback?: string; reviewedAt?: number }[];
   sourceVersionId?: string;
   sourceModel?: ModelProvenance;
   id: string;
@@ -104,6 +108,8 @@ export type ResponseVersion = {
   createdAt: number;
 };
 export type Data = {
+  policyRows?: PolicyRow[];
+  approvals?: { id: string; projectId: string; projectName: string; title: string; author: string }[];
   responseVersions: ResponseVersion[];
   projects: Project[];
   chats: Chat[];
@@ -126,11 +132,14 @@ export const emptyData: Data = {
   incoming: [],
 };
 export type Route = {
+  artifactId?: string;
   page: "Overview" | "Chat" | "Prompt" | "Artifact" | "Project";
   projectId?: string;
   chatId?: string;
 };
 export type Actions = {
+  importPolicies(projectId: string, input: PolicyImport): Promise<void>;
+  searchPolicies(projectId: string, text: string): Promise<PolicyRow[]>;
   createProject(name: string, description: string): Promise<string>;
   createChat(projectId: string, title: string): Promise<string>;
   assignChat(chatId: string, projectId: string): Promise<void>;
@@ -144,7 +153,8 @@ export type Actions = {
     body: string,
     message: string,
   ): Promise<void>;
-  push(commitId: string): Promise<void>;
+  selectFinal(commitId: string): Promise<void>;
+  push(commitId: string, approverIds?: string[]): Promise<void>;
   review(
     artifactId: string,
     decision: "verified" | "changes_requested",
@@ -163,5 +173,5 @@ export function canReview(
   authorId: string,
   userId: string,
 ) {
-  return (role === "owner" || role === "admin") && authorId !== userId;
+  return (role === "owner" || role === "admin" || role === "reviewer") && authorId !== userId;
 }

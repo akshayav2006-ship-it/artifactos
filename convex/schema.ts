@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { approvalDelivery, approvalReviewFields } from "./workspaceValidators";
 
 import {
   chatFields,
@@ -24,6 +25,9 @@ const subscriptionPlan = v.union(
 );
 
 export default defineSchema({
+  policyRows: defineTable({ projectId: v.id("projects"), sheet: v.string(), row: v.number(), text: v.string() })
+    .index("by_projectId", ["projectId"])
+    .searchIndex("search_text", { searchField: "text", filterFields: ["projectId"] }),
   workResponseVersions: defineTable(responseVersionFields)
     .index("by_chatId", ["chatId"]),
   workChats: defineTable(chatFields)
@@ -39,6 +43,16 @@ export default defineSchema({
     .index("by_projectId", ["projectId"])
     .index("by_commitId", ["commitId"])
     .index("by_promptId_and_reviewedAt", ["promptId", "reviewedAt"]),
+  approvalRequests: defineTable({
+    ...approvalReviewFields,
+    artifactId: v.id("workArtifacts"),
+    projectId: v.id("projects"),
+    userId: v.id("users"),
+    resolved: v.boolean(),
+    delivery: approvalDelivery,
+    createdAt: v.number(),
+  }).index("by_artifactId", ["artifactId"])
+    .index("by_userId_and_resolved", ["userId", "resolved"]),
   users: defineTable({
     clerkId: v.string(),
     email: v.string(),

@@ -1169,3 +1169,50 @@
 .ai-workspace .response-version + .response-version { border-top: 1px solid var(--border, #64748b); margin-top: 16px; }
 .ai-workspace .response-version pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ai-workspace .model-provenance { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin: 8px 0; overflow-wrap: anywhere; }
+
+.final-version-label {
+  display: block;
+  color: #adcdb7;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 0;
+}
+
+.google-search-toggle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.google-search-toggle input { width: auto; }
+.google-search-toggle small { flex-basis: 100%; color: var(--muted); }
+.google-sources { width: 100%; margin-top: 8px; font-size: 13px; }
+.google-sources ol { padding-left: 24px; margin: 8px 0; }
+.google-sources li { margin: 6px 0; overflow-wrap: anywhere; }
+.google-sources a, .source-citations a { color: #2563eb; text-decoration: underline; }
+.source-citations { margin-left: 3px; font-size: 11px; }
+.google-search-suggestions { display: block; width: 100%; min-height: 160px; border: 0; margin-top: 8px; background: white; }
+
+.commit-card fieldset {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border, #dce2e8);
+  border-radius: 8px;
+}
+.commit-card fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.commit-card fieldset input[type="checkbox"] {
+  width: auto;
+}
+
+.policy-sheets { margin: 12px 24px; padding: 14px; border: 1px solid var(--border, #e4e4e7); border-radius: 12px; }
+.policy-sheets summary { cursor: pointer; font-weight: 600; }
+.policy-sheets p, .policy-citations small { font-size: 12px; color: #71717a; }
+.policy-sheets > input { width: 100%; margin-top: 12px; padding: 8px; }
+.policy-sheets > label { display: block; font-size: 13px; }
+.policy-results { max-height: 260px; overflow: auto; }
+.policy-results > label { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid #e4e4e7; align-items: start; }
+.policy-results input { flex: 0 0 auto; margin-top: 4px; }
+.policy-results span span { display: block; white-space: pre-wrap; font-size: 12px; margin-top: 4px; }
+.policy-citations { margin-top: 12px; font-size: 12px; }
+.policy-citations details { margin: 8px 0; }
+.policy-citations pre { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -72,7 +72,13 @@ test('AI history survives manual edits and commits retain source provenance', as
   expect(updated).toMatchObject({ authorId: prompt.authorId, text: 'Draft', result: 'Second human revision' });
   expect(updated.model).toBeUndefined();
   expect(updated.provenance).toBeUndefined();
-  await user.mutation(api.workspace.push, { commitId });
+  await user.mutation(api.workspace.selectFinal, { commitId });
+  const approverId = await t.run(async ctx => {
+    const userId = await ctx.db.insert("users", { clerkId: "history-reviewer", name: "Reviewer", email: "reviewer@example.com", plan: "free", createdAt: 0, updatedAt: 0 });
+    await ctx.db.insert("projectMembers", { projectId, userId, role: "reviewer", joinedAt: 0 });
+    return userId;
+  });
+  await user.mutation(api.workspace.push, { commitId, approverIds: [approverId] });
   const artifact = (await user.query(api.workspace.scope, { projectId, limit: 10 })).artifacts[0];
   expect(artifact).toMatchObject({ body: 'Human revision', sourceVersionId: versions.page[1].id });
   expect(artifact.sourceModel).toBeUndefined();
@@ -129,4 +135,26 @@ test('legacy results are preserved without guessing provenance', async () => {
   await user.mutation(api.workspace.savePrompt, { promptId });
   await user.mutation(internal.ai.finish, { promptId, result: 'Conversational reply', requestedModel: 'gemini-test' });
   expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0]).toMatchObject({ saved: true, reply: 'Conversational reply', result: '' });
+});
+
+test('Google Search tools and source metadata survive response history', async () => {
+  const { user, chatId } = await setup();
+  const generate = vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({
+    text: 'A supported claim.',
+    providerMetadata: { google: { groundingMetadata: {
+      groundingChunks: [{ web: { uri: 'https://example.com', title: 'Example' } }],
+      groundingSupports: [{ segment: { text: 'A supported claim.' }, groundingChunkIndices: [0] }],
+      webSearchQueries: ['a claim'], searchEntryPoint: { renderedContent: '<div>Google Search</div>' },
+    } } },
+  } as never);
+  await user.action(api.ai.reply, { chatId, text: 'Research', model: 'gemini-2.5-flash', apiKey: 'test-key', googleSearch: true });
+  expect(generate.mock.instances[0]).toHaveProperty('options.tools.google_search');
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(prompt.replyProvenance?.grounding?.sources).toEqual([{ url: 'https://example.com', title: 'Example' }]);
+  const versions = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
+  expect(versions.page[0].provenance?.grounding).toEqual(prompt.replyProvenance?.grounding);
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Human revision' });
+  const history = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
+  expect(history.page.find(version => version.source === 'ai')?.provenance?.grounding).toEqual(prompt.replyProvenance?.grounding);
+  expect(history.page[0].provenance).toBeUndefined();
 });

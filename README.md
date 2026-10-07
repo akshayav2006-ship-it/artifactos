@@ -20,7 +20,7 @@ Open the address printed by Vite. `npm run build` checks the frontend and builds
 - **Pinned** stores shortcuts to projects and chats for the current local user or signed-in account.
 - **Projects** has a create button. A project shows its name, description, invitations, collaborators, chats, prompts, and pushed artifacts.
 
-Each person selects their own model and chats in Artifactos. Use **Save prompt** on selected turns to add them to the prompt library. Saving a prompt never attaches its AI reply. In chat, manually paste and attach a result, create one or more immutable commits, then push individual commits. A different project owner or admin can verify a pushed artifact or request changes, entering a trust score from 0 to 100 and review notes. Contributors, reviewers, and viewers cannot verify. Scores are human review scores, not automatically generated confidence estimates.
+Each person selects their own model and chats in Artifactos. Use **Save prompt** on selected turns to add them to the prompt library. Saving a prompt never attaches its AI reply. In chat, manually paste and attach a result, create one or more immutable commits, then push individual commits. Before submitting, select required approvers from other project owners, admins, and reviewers. Every selected approver must approve before the submission is verified; a request for changes stops approval. Each review records a trust score from 0 to 100 and notes; the final score is the rounded average of approval scores. Contributors and viewers cannot approve, and authors cannot approve their own work. Existing submissions retain their original one-approval requirement. Scores are human review scores, not automatically generated confidence estimates.
 
 ## Local and shared workspaces
 
@@ -69,3 +69,17 @@ New AI replies and manual result edits automatically create immutable response v
 AI versions record the provider, requested model ID, and provider-reported model/version when supplied. **Not provided** means the provider did not expose a distinct version; an SDK fallback to the requested alias is not treated as a resolved version. Manually attaching a result leaves the conversational reply and its model attribution intact. The attached result is attributed to the contributor, not to the AI model. Late replies are preserved without overwriting a manual revision.
 
 Existing workspaces remain compatible. An older result is preserved as an **Earlier saved result** before its first edit or commit; its original source and response time cannot be reconstructed. Previously overwritten results cannot be recovered. Response history stores no provider credentials. The Convex Agent component continues to manage provider conversation context; response versions record the application's result revision history.
+
+## Google Search citations
+
+Select a Gemini model in chat and enable **Ground with Google Search** before sending. The model searches when useful and returns clickable inline citations, a source list, and Google Search suggestions. Search usage may incur charges under your Google AI project. The option works in both the local development workspace and the shared Convex workspace.
+
+Source metadata is retained with the original AI reply and its response history. Manually attached or edited results do not inherit the original reply's citations. Existing replies remain readable without source metadata. Gemini API keys remain in session memory and are not saved with responses.
+
+This uses the [AI SDK Google Search tool](https://ai-sdk.dev/providers/ai-sdk-providers/google) and [Google grounding metadata](https://ai.google.dev/gemini-api/docs/google-search). Deploy the Convex changes to enable grounding in the hosted workspace.
+
+## Company policy sheets
+
+In a project chat, open **Company policy sheets**, import a CSV or TSV export, search the policy text, and select up to eight rows before sending an AI prompt. Both the local development workspace and shared Gemini workspace support this flow. Imports retain the file name and original spreadsheet row number, including blank rows and quoted multiline cells. Each import accepts up to 200 nonempty rows, 6,000 characters per row, and a 300 KB file. Reimporting adds another copy; native Excel files and live Google Sheets syncing are not supported.
+
+AI replies can cite selected excerpts using `[P1]` markers. Expand **Company policy citations** below the reply or in response history to see the exact excerpt, sheet name, and row. Only markers referring to supplied rows receive source metadata. These citations identify source excerpts; they do not independently verify the model's interpretation. Manually attached results do not inherit AI citations. Shared search is project-scoped full-text search; local search matches all entered words. Project members can read policies; owners, admins, and members can import them. Deploy the Convex schema and functions to enable shared policy sheets.

@@ -91,3 +91,29 @@ test("SMTP rejection is recorded as failure and the connection is closed", async
   );
   expect(mail.close).toHaveBeenCalled();
 });
+
+test("Gmail sends approval requests to the assigned approver and records delivery", async () => {
+  const { t, invitationId } = await setup();
+  const requestId = await t.run(async ctx => {
+    const invitation = (await ctx.db.get(invitationId))!;
+    const projectId = invitation.projectId;
+    const authorId = await ctx.db.insert("users", { clerkId: "contributor", name: "Contributor", email: "contributor@example.com", plan: "free", createdAt: 0, updatedAt: 0 });
+    await ctx.db.insert("projectMembers", { projectId, userId: invitation.invitedBy, role: "owner", joinedAt: 0 });
+    const chatId = await ctx.db.insert("workChats", { projectId, authorId, author: "Contributor", title: "Chat", agentThreadId: "test-thread", createdAt: 0 });
+    const promptId = await ctx.db.insert("workPrompts", { projectId, chatId, authorId, author: "Contributor", text: "Prompt", result: "Result", status: "complete", createdAt: 0 });
+    const snapshot = { projectId, chatId, promptId, authorId, author: "Contributor", title: "Findings", body: "Snapshot", message: "Ready", createdAt: 0 };
+    const commitId = await ctx.db.insert("workCommits", snapshot);
+    const artifactId = await ctx.db.insert("workArtifacts", { ...snapshot, commitId, status: "pending" });
+    return await ctx.db.insert("approvalRequests", { projectId, artifactId, userId: invitation.invitedBy, resolved: false, delivery: "queued", createdAt: 0 });
+  });
+  mail.sendMail.mockResolvedValue({ accepted: ["owner@example.com"] });
+  await t.action(internal.gmail.deliverApproval, { requestId });
+  expect(mail.sendMail).toHaveBeenCalledWith(expect.objectContaining({
+    to: "owner@example.com", subject: "Approval requested: Findings",
+    text: expect.stringContaining("Contributor"),
+  }));
+  expect((await t.run(ctx => ctx.db.get(requestId)))?.delivery).toBe("sent");
+  expect(mail.close).toHaveBeenCalled();
+  await t.action(internal.gmail.deliverApproval, { requestId });
+  expect(mail.sendMail).toHaveBeenCalledTimes(1);
+});

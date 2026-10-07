@@ -1,8 +1,17 @@
 import { v } from "convex/values";
+export const googleGroundingValidator = v.object({
+  sources: v.array(v.object({ url: v.string(), title: v.string() })),
+  supports: v.array(v.object({ text: v.string(), sourceIndices: v.array(v.number()) })),
+  searchQueries: v.array(v.string()),
+  searchEntryPoint: v.optional(v.string()),
+});
+export const policyCitationValidator = v.object({ marker: v.string(), policyId: v.string(), sheet: v.string(), row: v.number(), text: v.string() });
 export const modelProvenance = v.object({
   provider: v.union(v.literal("gemini"), v.literal("chatgpt")),
   requestedModel: v.string(),
   resolvedModel: v.optional(v.string()),
+  grounding: v.optional(googleGroundingValidator),
+  policyCitations: v.optional(v.array(policyCitationValidator)),
 });
 export const responseVersionFields = {
   chatId: v.id("workChats"),
@@ -30,6 +39,7 @@ export const projectView = v.object({
   ownerId: v.string(),
 });
 export const chatFields = {
+  finalCommitId: v.optional(v.id("workCommits")),
   title: v.string(),
   authorId: v.id("users"),
   author: v.string(),
@@ -73,7 +83,14 @@ export const commitFields = {
   message: v.string(),
   createdAt: v.number(),
 };
+export const approvalReviewFields = {
+  decision: v.optional(v.union(v.literal("verified"), v.literal("changes_requested"))),
+  score: v.optional(v.number()),
+  feedback: v.optional(v.string()),
+  reviewedAt: v.optional(v.number()),
+};
 export const artifactFields = {
+  requiredApprovals: v.optional(v.number()),
   ...commitFields,
   projectId: v.id("projects"),
   commitId: v.id("workCommits"),
@@ -89,6 +106,7 @@ export const artifactFields = {
   feedback: v.optional(v.string()),
 };
 export const chatView = v.object({
+  finalCommitId: v.optional(v.id("workCommits")),
   id: v.string(),
   title: v.string(),
   projectId: v.string(),
@@ -120,8 +138,12 @@ export const commitView = v.object({
   promptId: v.string(),
   authorId: v.string(),
 });
+export const approvalDelivery = v.union(v.literal("queued"), v.literal("sent"), v.literal("failed"), v.literal("not_configured"));
+export const approverView = v.object({ userId: v.string(), name: v.string(), delivery: approvalDelivery, ...approvalReviewFields });
 export const artifactView = v.object({
   ...commitView.fields,
+  approvers: v.optional(v.array(approverView)),
+  requiredApprovals: v.optional(v.number()),
   commitId: v.string(),
   status: artifactFields.status,
   score: v.optional(v.number()),

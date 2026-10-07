@@ -1,3 +1,4 @@
+import { assignApprovers, approverViews } from "./approvals";
 import { v } from "convex/values";
 import { createThread, saveMessage } from "@convex-dev/agent";
 import { mutation, query } from "./_generated/server";
@@ -110,6 +111,7 @@ export const scope = query({
         projectId: c.projectId || "",
         authorId: c.authorId,
         author: c.author,
+        finalCommitId: c.finalCommitId,
         createdAt: c.createdAt,
       })),
       prompts: prompts.map(({ _id, _creationTime, ...p }) => {
@@ -120,11 +122,11 @@ export const scope = query({
         void _creationTime;
         return { ...c, id: _id, projectId: c.projectId || "" };
       }),
-      artifacts: artifacts.map(({ _id, _creationTime, reviewerId, ...a }) => {
+      artifacts: await Promise.all(artifacts.map(async ({ _id, _creationTime, reviewerId, ...a }) => {
         void _creationTime;
         void reviewerId;
-        return { ...a, id: _id };
-      }),
+        return { ...a, id: _id, approvers: await approverViews(ctx, _id) };
+      })),
       hasMore: [chats, prompts, commits, artifacts].some(
         (rows) => rows.length === limit,
       ),
@@ -286,13 +288,26 @@ export const commit = mutation({
     });
   },
 });
-export const push = mutation({
+export const selectFinal = mutation({
   args: { commitId: v.id("workCommits") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const commit = await ctx.db.get(args.commitId);
+    if (!commit?.projectId) throw new Error("A project commit is required.");
+    const { chat, user } = await chatAccess(ctx, commit.chatId, true);
+    if (commit.authorId !== user._id)
+      throw new Error("Only the contributor can finalize this commit.");
+    await ctx.db.patch(chat._id, { finalCommitId: commit._id });
+    return null;
+  },
+});
+export const push = mutation({
+  args: { commitId: v.id("workCommits"), approverIds: v.optional(v.array(v.id("users"))) },
   returns: v.id("workArtifacts"),
   handler: async (ctx, args) => {
     const commit = await ctx.db.get(args.commitId);
     if (!commit?.projectId) throw new Error("A project commit is required.");
-    const { user } = await chatAccess(ctx, commit.chatId, true);
+    const { chat, user } = await chatAccess(ctx, commit.chatId, true);
     if (commit.authorId !== user._id)
       throw new Error("Only the contributor can push this commit.");
     const previous = await ctx.db
@@ -300,15 +315,20 @@ export const push = mutation({
       .withIndex("by_commitId", (q) => q.eq("commitId", commit._id))
       .unique();
     if (previous) throw new Error("This commit has already been pushed.");
+    if (chat.finalCommitId !== commit._id)
+      throw new Error("Select this commit as the final version before submitting it.");
     const { _id, _creationTime, ...snapshot } = commit;
     void _creationTime;
-    return await ctx.db.insert("workArtifacts", {
+    const artifactId = await ctx.db.insert("workArtifacts", {
       ...snapshot,
       projectId: commit.projectId,
       commitId: _id,
       createdAt: Date.now(),
       status: "pending",
+      requiredApprovals: args.approverIds?.length,
     });
+    await assignApprovers(ctx, artifactId, commit.projectId, user._id, args.approverIds);
+    return artifactId;
   },
 });
 export const review = mutation({
@@ -323,10 +343,10 @@ export const review = mutation({
     const user = await requireCurrentUser(ctx);
     const artifact = await ctx.db.get(args.artifactId);
     if (!artifact) throw new Error("Artifact not found.");
-    await requireRole(ctx, artifact.projectId, ["owner", "admin"]);
+    const membership = await requireRole(ctx, artifact.projectId, ["owner", "admin", "reviewer"]);
     if (artifact.authorId === user._id)
       throw new Error(
-        "A different project owner or admin must review your contribution.",
+        "A different project owner or admin, or a designated reviewer, must review your contribution.",
       );
     if (artifact.status !== "pending")
       throw new Error(
@@ -334,14 +354,29 @@ export const review = mutation({
       );
     if (!Number.isInteger(args.score) || args.score < 0 || args.score > 100)
       throw new Error("Trust score must be an integer from 0 to 100.");
-    await ctx.db.patch(artifact._id, {
-      status: args.decision,
-      score: args.score,
-      feedback: text(args.feedback, 2000),
-      reviewer: user.name,
-      reviewerId: user._id,
-      reviewedAt: Date.now(),
+    const requests = await ctx.db.query("approvalRequests").withIndex("by_artifactId", q => q.eq("artifactId", artifact._id)).take(101);
+    if (requests.length > 100) throw new Error("Too many approval requests for this submission.");
+    const ownRequest = requests.find(r => r.userId === user._id);
+    // Older submissions without assignments retain owner/admin review access.
+    if (!ownRequest && (artifact.requiredApprovals !== undefined || requests.length || membership.role === "reviewer"))
+      throw new Error("Only a designated approver has permission to review this submission.");
+    if (ownRequest?.resolved || ownRequest?.decision)
+      throw new Error("You have already reviewed this submission.");
+    const reviewedAt = Date.now();
+    const feedback = text(args.feedback, 2000);
+    if (ownRequest) await ctx.db.patch(ownRequest._id, {
+      decision: args.decision, score: args.score, feedback, reviewedAt, resolved: true,
     });
+    const approvals = requests.filter(r => r.decision === "verified");
+    const approved = args.decision === "verified" && approvals.length + 1 >= (artifact.requiredApprovals ?? 1);
+    if (args.decision === "changes_requested" || approved) {
+      await ctx.db.patch(artifact._id, {
+        status: args.decision,
+        score: approved ? Math.round((approvals.reduce((sum, r) => sum + r.score!, 0) + args.score) / (approvals.length + 1)) : args.score,
+        feedback, reviewer: user.name, reviewerId: user._id, reviewedAt,
+      });
+      for (const request of requests) await ctx.db.patch(request._id, { resolved: true });
+    }
     return null;
   },
 });
@@ -420,11 +455,11 @@ export const listArtifacts = query({
       .paginate(args.paginationOpts);
     return {
       ...result,
-      page: result.page.map(({ _id, _creationTime, reviewerId, ...a }) => {
+      page: await Promise.all(result.page.map(async ({ _id, _creationTime, reviewerId, ...a }) => {
         void _creationTime;
         void reviewerId;
-        return { ...a, id: _id };
-      }),
+        return { ...a, id: _id, approvers: await approverViews(ctx, _id) };
+      })),
     };
   },
 });
@@ -489,6 +524,7 @@ export const chats = query({
       projectId: c.projectId || "",
       authorId: c.authorId,
       author: c.author,
+      finalCommitId: c.finalCommitId,
       createdAt: c.createdAt,
     }));
   },

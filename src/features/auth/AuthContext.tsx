@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { authService } from '../services'
+import { AuthContext } from './useAuth'
 
 type AuthUser = {
   id: string
@@ -8,14 +9,14 @@ type AuthUser = {
   role: 'Owner' | 'Reviewer' | 'Member'
 }
 
-type AuthContextValue = {
+export type AuthContextValue = {
   user: AuthUser | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+
 
 const STORAGE_KEY = 'artifactos_user'
 const TOKEN_KEY = 'artifactos_access_token'
@@ -93,23 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
   }
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      isAuthenticated: Boolean(user),
-      login,
-      logout,
-    }),
-    [user],
-  )
+  const value: AuthContextValue = { user, isAuthenticated: Boolean(user), login, logout }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used inside AuthProvider')
-  }
-  return context
 }

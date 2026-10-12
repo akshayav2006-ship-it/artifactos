@@ -11,10 +11,21 @@ export async function getCurrentUser(
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
 
-  return await ctx.db
+  const current = await ctx.db
+    .query("users")
+    .withIndex("by_tokenIdentifier", (q) =>
+      q.eq("tokenIdentifier", identity.tokenIdentifier),
+    )
+    .unique();
+  if (current) return current;
+
+  const legacy = await ctx.db
     .query("users")
     .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .unique();
+  // Legacy records are upgraded on sync. A bound identity must never be
+  // claimed by another issuer merely because its subject happens to match.
+  return legacy && !legacy.tokenIdentifier ? legacy : null;
 }
 
 export async function requireCurrentUser(ctx: AppCtx): Promise<Doc<"users">> {

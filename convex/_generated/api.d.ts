@@ -13,6 +13,7 @@ import type * as approvals from "../approvals.js";
 import type * as auth from "../auth.js";
 import type * as email from "../email.js";
 import type * as gmail from "../gmail.js";
+import type * as identityMigration from "../identityMigration.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as policies from "../policies.js";
 import type * as projects from "../projects.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   email: typeof email;
   gmail: typeof gmail;
+  identityMigration: typeof identityMigration;
   "lib/auth": typeof lib_auth;
   policies: typeof policies;
   projects: typeof projects;

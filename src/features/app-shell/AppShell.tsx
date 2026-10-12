@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
-import { useAppState } from '../state/AppContext'
+import { useAuth } from '../auth/useAuth'
+import { useAppState } from '../state/useAppState'
 import { navItems } from '../routes/navigation'
 import './AppShell.css'
 

@@ -144,7 +144,7 @@ export async function reply(model: string, input: ChatMessage[]) {
   const available = await models();
   if (!available.some((m: { id: string }) => m.id === model)) throw new Error('Choose an available ChatGPT model.');
   const account = await credentials();
-  const response = await fetch(`${resource}/responses`, { method: 'POST', headers: { Authorization: `Bearer ${account.access}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input, store: false, stream: true }), signal: AbortSignal.timeout(120000) });
+  const response = await fetch(`${resource}/responses`, { method: 'POST', headers: { Authorization: `Bearer ${account.access}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input, store: false, stream: true, ...(model === 'gpt-5.6-luna' ? { reasoning: { effort: 'none' } } : {}) }), signal: AbortSignal.timeout(120000) });
   if (!response.ok || !response.body) throw new Error(`ChatGPT request failed (${response.status}). Check your plan usage or reconnect.`);
   return readReplyStream(response.body);
 }

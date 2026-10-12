@@ -27,13 +27,11 @@ export const syncCurrentUser = mutation({
       throw new Error("A valid email address is required.");
     }
 
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
+    const existing = await getCurrentUser(ctx);
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        tokenIdentifier: identity.tokenIdentifier,
         email,
         name,
         ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}),
@@ -45,6 +43,7 @@ export const syncCurrentUser = mutation({
 
     return await ctx.db.insert("users", {
       clerkId: identity.subject,
+      tokenIdentifier: identity.tokenIdentifier,
       email,
       name,
       ...(args.imageUrl ? { imageUrl: args.imageUrl } : {}),
@@ -63,6 +62,7 @@ export const current = query({
       _id: v.id("users"),
       _creationTime: v.number(),
       clerkId: v.string(),
+      tokenIdentifier: v.optional(v.string()),
       email: v.string(),
       name: v.string(),
       imageUrl: v.optional(v.string()),

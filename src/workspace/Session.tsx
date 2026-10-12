@@ -27,14 +27,16 @@ import Workspace from "./Workspace";
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const url = import.meta.env.VITE_CONVEX_URL;
 const client = url ? new ConvexReactClient(url) : null;
+const workspaceModeKey = "artifactos.workspaceMode";
 export default function Session() {
   const [route, setRoute] = useState<Route>({ page: window.location.pathname === "/chat" ? "Chat" : "Overview" });
-  const [cloud, setCloud] = useState(false);
+  const [cloud, setCloud] = useState(() => sessionStorage.getItem(workspaceModeKey) === "shared");
   const localAccount = (
     <button
       className="account-control"
       onClick={() => {
         setRoute({ page: "Overview" });
+        sessionStorage.setItem(workspaceModeKey, "shared");
         setCloud(true);
       }}
     >
@@ -57,13 +59,14 @@ export default function Session() {
     );
   return (
     <Boundary>
-      <ClerkProvider publishableKey={key}>
+      <ClerkProvider publishableKey={key} signInFallbackRedirectUrl="/workspace" signUpFallbackRedirectUrl="/workspace" afterSignOutUrl="/workspace">
         <ConvexProviderWithClerk client={client} useAuth={useAuth}>
           <Connected
             route={route}
             setRoute={setRoute}
             leave={() => {
               setRoute({ page: "Overview" });
+              sessionStorage.setItem(workspaceModeKey, "local");
               setCloud(false);
             }}
           />
@@ -165,6 +168,16 @@ function Connected({
         <button className="subtle" onClick={leave}>
           Continue locally
         </button>
+      </div>
+    );
+  if (!isAuthenticated)
+    return (
+      <div className="session-message">
+        <h2>Could not connect your account</h2>
+        <p>Your sign-in succeeded, but workspace access could not be verified. Reload to try again.</p>
+        <button className="primary" onClick={() => window.location.reload()}>Reload workspace</button>
+        <UserButton />
+        <button className="subtle" onClick={leave}>Return to local workspace</button>
       </div>
     );
   if (error || !me)

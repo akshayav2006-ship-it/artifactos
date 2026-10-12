@@ -31,6 +31,7 @@ type Props = {
   more?: boolean;
 };
 type Pin = { id: string; title: string; route: Route };
+const demoChatGPTModel: AIRequest["model"] = { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", provider: "chatgpt" };
 const date = (value: number) =>
   new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -58,7 +59,24 @@ export default function Workspace({
   loadMore,
   more,
 }: Props) {
-  const [ai, setAI] = useState<AIRequest>();
+  const demoModelKey = `artifactos-demo-model-${userId}`;
+  const [ai, setAI] = useState<AIRequest | undefined>(() => {
+    if (local && import.meta.env.DEV) {
+      try {
+        if (localStorage.getItem(demoModelKey) === demoChatGPTModel.id) return { model: demoChatGPTModel };
+      } catch { /* Model selection still works when browser storage is unavailable. */ }
+    }
+    return undefined;
+  });
+  function chooseAI(next?: AIRequest) {
+    setAI(next);
+    if (local && import.meta.env.DEV) {
+      try {
+        if (next?.model.provider === "chatgpt" && next.model.id === demoChatGPTModel.id) localStorage.setItem(demoModelKey, demoChatGPTModel.id);
+        else localStorage.removeItem(demoModelKey);
+      } catch { /* Keep the in-memory choice if preferences cannot be persisted. */ }
+    }
+  }
   const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -528,7 +546,7 @@ export default function Workspace({
           ) : route.page === "Chat" ? (
             <ChatView
               ai={ai}
-              aiControls={<AIControls apiKey={geminiKey} setApiKey={setGeminiKey} local={local} value={ai} onChange={setAI} busy={busy} />}
+              aiControls={<AIControls apiKey={geminiKey} setApiKey={setGeminiKey} local={local} value={ai} onChange={chooseAI} busy={busy} />}
               key={route.chatId || `new-${route.projectId || "personal"}`}
               data={data}
               route={route}
@@ -764,15 +782,15 @@ function Section({
   onClick,
 }: {
   title: string;
-  action: string;
+  action?: string;
   onClick: () => void;
 }) {
   return (
     <div className="section-head">
       <h2>{title}</h2>
-      <button className="subtle" onClick={onClick}>
+      {action && <button className="subtle" onClick={onClick}>
         ＋ {action}
-      </button>
+      </button>}
     </div>
   );
 }
@@ -975,7 +993,7 @@ function ProjectView({
         <section className="panel">
           <Section
             title="Project collaborators"
-            action="Invite"
+            action={["owner", "admin"].includes(project.role) ? "Invite" : undefined}
             onClick={invite}
           />
           {members.length ? (
@@ -1751,7 +1769,7 @@ function CommitCard({
             <p className="muted">Select everyone who must approve this submission.</p>
             {approvers.map(m => <label key={m.id}>
               <input type="checkbox" checked={requiredIds.includes(m.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, m.id] : ids.filter(id => id !== m.id))} />
-              {m.name} ({m.role})
+              {m.name} ({m.role}) · {m.email}
             </label>)}
             {!approvers.length && <p className="muted">Add another owner, admin, or reviewer before submitting.</p>}
           </fieldset>}

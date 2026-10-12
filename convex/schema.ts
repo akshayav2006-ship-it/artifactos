@@ -55,6 +55,7 @@ export default defineSchema({
     .index("by_userId_and_resolved", ["userId", "resolved"]),
   users: defineTable({
     clerkId: v.string(),
+    tokenIdentifier: v.optional(v.string()),
     email: v.string(),
     name: v.string(),
     imageUrl: v.optional(v.string()),
@@ -64,6 +65,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_clerk_id", ["clerkId"])
+    .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("by_email", ["email"]),
 
   projects: defineTable({

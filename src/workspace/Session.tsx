@@ -30,7 +30,10 @@ const client = url ? new ConvexReactClient(url) : null;
 const workspaceModeKey = "artifactos.workspaceMode";
 export default function Session() {
   const [route, setRoute] = useState<Route>({ page: window.location.pathname === "/chat" ? "Chat" : "Overview" });
-  const [cloud, setCloud] = useState(() => sessionStorage.getItem(workspaceModeKey) === "shared");
+  const [cloud, setCloud] = useState(() => {
+    const mode = sessionStorage.getItem(workspaceModeKey);
+    return mode ? mode === "shared" : import.meta.env.PROD && Boolean(key && client);
+  });
   const localAccount = (
     <button
       className="account-control"

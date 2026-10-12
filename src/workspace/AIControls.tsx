@@ -12,6 +12,7 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
   const [working, setWorking] = useState(false);
   const [custom, setCustom] = useState('');
   const supported = local && import.meta.env.DEV;
+  const hostedNotebook = local && !import.meta.env.DEV;
   async function refresh() {
     const next = await localAI<Status>('status');
     setStatus(next);
@@ -59,7 +60,7 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
           onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined, googleSearch: model.provider === 'gemini' ? value?.googleSearch : undefined } : undefined);
         }}>
           <option value="">Notebook · save only</option>
-          <optgroup label="Google Gemini · AI Studio key">
+          <optgroup label="Google Gemini · AI Studio key" disabled={hostedNotebook}>
             {models.filter(m => m.provider === 'gemini').map(m => <option key={m.id} value={`gemini:${m.id}`}>{m.name}</option>)}
           </optgroup>
           {models.some(m => m.provider === 'chatgpt') && <optgroup label="ChatGPT · your plan">
@@ -69,6 +70,7 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
       </label>
       <button type="button" className="subtle" aria-expanded={open} onClick={() => setOpen(!open)}>⚙ AI connections</button>
     </div>
+    {hostedNotebook && <p className="connection-note">Sign in to a shared workspace to use Gemini. This personal notebook saves prompts and manually attached results on this device.</p>}
     {value?.model.provider === 'gemini' && <label className="google-search-toggle">
       <input type="checkbox" checked={value.googleSearch ?? false} disabled={busy} onChange={e => onChange({ ...value, googleSearch: e.target.checked })} />
       Ground with Google Search

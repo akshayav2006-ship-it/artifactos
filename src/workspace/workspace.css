@@ -1273,3 +1273,10 @@
 .ai-workspace .document-card > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .ai-workspace .document-card small { display: block; margin-top: 6px; color: #c3c3c3; }
 .ai-workspace .document-card button { flex-shrink: 0; }
+
+.workspace-search { position: relative; margin: 0 0 20px; max-width: 720px; }
+.workspace-search label { display: grid; gap: 6px; }
+.workspace-search kbd { color: var(--muted); font-size: 11px; }
+.workspace-search-results { border: 1px solid #777; border-radius: 10px; padding: 12px; max-height: 420px; overflow: auto; }
+.workspace-search-results button { display: grid; text-align: left; width: 100%; gap: 4px; padding: 10px; }
+.workspace-search-results span { overflow-wrap: anywhere; }

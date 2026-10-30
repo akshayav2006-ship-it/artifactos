@@ -31,15 +31,19 @@ export default defineSchema({
   workResponseVersions: defineTable(responseVersionFields)
     .index("by_chatId", ["chatId"]),
   workChats: defineTable(chatFields)
+    .searchIndex("search_title", { searchField: "title", filterFields: ["projectId", "authorId"] })
     .index("by_authorId_and_projectId", ["authorId", "projectId"])
     .index("by_projectId", ["projectId"]),
   workPrompts: defineTable(promptFields)
+    .searchIndex("search_text", { searchField: "text", filterFields: ["projectId", "authorId"] })
     .index("by_chatId", ["chatId"])
     .index("by_chatId_and_status", ["chatId", "status"])
     .index("by_projectId", ["projectId"])
     .index("by_authorId_and_projectId", ["authorId", "projectId"]),
   workCommits: defineTable(commitFields).index("by_chatId", ["chatId"]),
   workArtifacts: defineTable(artifactFields)
+    .searchIndex("search_title", { searchField: "title", filterFields: ["projectId"] })
+    .searchIndex("search_body", { searchField: "body", filterFields: ["projectId"] })
     .index("by_projectId", ["projectId"])
     .index("by_commitId", ["commitId"])
     .index("by_promptId_and_reviewedAt", ["promptId", "reviewedAt"]),

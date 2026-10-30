@@ -33,6 +33,8 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
     return () => controller.abort();
   }, [local]);
   const [open, setOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const modelMatches = (m: AIModel) => `${m.name} ${m.id} ${m.provider}`.toLowerCase().includes(modelSearch.toLowerCase()) || m.id === value?.model.id;
   const [models, setModels] = useState<AIModel[]>(value && !geminiModels.some(m => m.id === value.model.id) ? [...geminiModels, value.model] : geminiModels);
   const [status, setStatus] = useState<Status>();
   const [error, setError] = useState('');
@@ -82,20 +84,22 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
   return <div className="ai-controls">
     <div className="ai-picker-row">
       <label>Model
+        <input type="search" aria-label="Search models" placeholder="Search models…" value={modelSearch} onChange={e => setModelSearch(e.target.value)} />
         <select aria-label="AI model" disabled={busy} value={value ? `${value.model.provider}:${value.model.id}` : ''} onChange={e => {
           const model = [...models, ...groqModels, ...openRouterModels].find(m => `${m.provider}:${m.id}` === e.target.value);
           onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined, googleSearch: model.provider === 'gemini' ? value?.googleSearch : undefined } : undefined);
         }}>
           <option value="">Notebook · save only</option>
-          {!local && <optgroup label="Groq · free-tier chat">{groqModels.map(m => <option key={m.id} value={`groq:${m.id}`}>{m.name}</option>)}</optgroup>}
-          {!local && <optgroup label="OpenRouter · free chat models">{openRouterModels.map(m => <option key={m.id} value={`openrouter:${m.id}`}>{m.name}</option>)}
+          {value && ![...models, ...groqModels, ...openRouterModels].some(m => m.id === value.model.id && m.provider === value.model.provider) && <option value={`${value.model.provider}:${value.model.id}`}>{value.model.name} · remembered</option>}
+          {!local && <optgroup label="Groq · free-tier chat">{groqModels.filter(modelMatches).map(m => <option key={m.id} value={`groq:${m.id}`}>{m.name}</option>)}</optgroup>}
+          {!local && <optgroup label="OpenRouter · free chat models">{openRouterModels.filter(modelMatches).map(m => <option key={m.id} value={`openrouter:${m.id}`}>{m.name}</option>)}
             {value?.model.provider === 'openrouter' && !openRouterModels.some(m => m.id === value.model.id) && <option value={`openrouter:${value.model.id}`} disabled>{value.model.name} · unavailable</option>}
           </optgroup>}
           <optgroup label="Gemini · free-tier eligible · your key" disabled={hostedNotebook}>
-            {models.filter(m => m.provider === 'gemini').map(m => <option key={m.id} value={`gemini:${m.id}`}>{m.name}</option>)}
+            {models.filter(m => m.provider === 'gemini').filter(modelMatches).map(m => <option key={m.id} value={`gemini:${m.id}`}>{m.name}</option>)}
           </optgroup>
           {models.some(m => m.provider === 'chatgpt') && <optgroup label="ChatGPT · your plan">
-            {models.filter(m => m.provider === 'chatgpt').map(m => <option key={m.id} value={`chatgpt:${m.id}`}>{m.name}</option>)}
+            {models.filter(m => m.provider === 'chatgpt').filter(modelMatches).map(m => <option key={m.id} value={`chatgpt:${m.id}`}>{m.name}</option>)}
           </optgroup>}
         </select>
       </label>

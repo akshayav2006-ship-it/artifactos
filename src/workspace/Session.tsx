@@ -23,13 +23,18 @@ import type { Actions, Data, Route } from "../../shared/workspace";
 import { emptyData } from "../../shared/workspace";
 import { loadLocal, localActions, storageKey } from "./local";
 import Workspace from "./Workspace";
+import { readRoute, routeURL } from "./navigation";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const url = import.meta.env.VITE_CONVEX_URL;
 const client = url ? new ConvexReactClient(url) : null;
 const workspaceModeKey = "artifactos.workspaceMode";
 export default function Session() {
-  const [route, setRoute] = useState<Route>({ page: window.location.pathname === "/chat" ? "Chat" : "Overview" });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const route = readRoute(new URL(`${location.pathname}${location.search}`, window.location.origin));
+  const setRoute = (next: Route) => { void navigate(routeURL(next)); };
   const [cloud, setCloud] = useState(() => {
     const mode = sessionStorage.getItem(workspaceModeKey);
     return mode ? mode === "shared" : import.meta.env.PROD && Boolean(key && client);
@@ -108,11 +113,14 @@ function Local({
     };
   });
   const actions = localActions(controller.get, controller.persist);
+  const artifact = data.artifacts.find(a => a.id === route.artifactId);
+  const chat = data.chats.find(c => c.id === route.chatId);
+  const localRoute = { ...route, projectId: route.projectId || artifact?.projectId || chat?.projectId || undefined };
   return (
     <Workspace
       data={data}
       actions={actions}
-      route={route}
+      route={localRoute}
       setRoute={setRoute}
       account={account}
       userId="local"
@@ -192,7 +200,7 @@ function Connected({
       </div>
     );
   return (
-    <Remote
+    <RemoteGate
       route={route}
       setRoute={setRoute}
       userId={me._id}
@@ -206,6 +214,12 @@ function Connected({
       }
     />
   );
+}
+function RemoteGate(props: { route: Route; setRoute: (r: Route) => void; userId: string; account: ReactNode }) {
+  const resolved = useQuery(api.navigation.resolve, { project: props.route.projectId, chat: props.route.chatId, artifact: props.route.artifactId });
+  if (resolved === undefined) return <div className="session-message" role="status">Loading destination…</div>;
+  if (!resolved) return <div className="session-message"><h2>Destination unavailable</h2><p>This item is missing or you no longer have access.</p><button onClick={() => props.setRoute({ page: 'Overview' })}>Back to workspace</button></div>;
+  return <Remote key={props.userId} {...props} route={{ ...props.route, ...resolved }} />;
 }
 function Remote({
   route,
@@ -283,6 +297,7 @@ function Remote({
   const invite = useAction(api.email.invite);
   const accept = useMutation(api.team.acceptInvitation);
   const actions: Actions = {
+    searchWorkspace: (text) => convex.query(api.navigation.search, { text }),
     importPolicies: async (projectId, input) => { await importPolicies({ projectId: projectId as Id<"projects">, ...input }); },
     searchPolicies: (projectId, text) => convex.query(api.policies.search, { projectId: projectId as Id<"projects">, text }),
     createProject: (name, description) => createProject({ name, description }),
@@ -339,6 +354,7 @@ function Remote({
       await accept({ invitationId: invitationId as Id<"invitations"> });
     },
   };
+  const requestedPrompt = useQuery(api.navigation.prompt, route.promptId ? { id: route.promptId } : 'skip');
   const data: Data = {
     responseVersions: responsePages.results,
     projects: (projects || []).map((p) => ({
@@ -349,7 +365,7 @@ function Remote({
       ownerId: p.ownerId,
     })),
     chats: chats || [],
-    prompts: promptPages.results,
+    prompts: requestedPrompt && requestedPrompt.chatId === route.chatId && !promptPages.results.some(p => p.id === requestedPrompt.id) ? [requestedPrompt, ...promptPages.results] : promptPages.results,
     commits: commitPages.results,
     approvals: approvals || [],
     artifacts: requestedArtifact && !artifactPages.results.some(a => a.id === requestedArtifact.id) ? [requestedArtifact, ...artifactPages.results] : artifactPages.results,
@@ -389,7 +405,7 @@ function Remote({
       account={account}
       userId={userId}
       local={false}
-      loading={!projects || !chats || promptPages.status === "LoadingFirstPage"}
+      loading={!projects || !chats || promptPages.status === "LoadingFirstPage" || (!!projectId && artifactPages.status === "LoadingFirstPage") || (!!route.promptId && requestedPrompt === undefined) || (!!route.artifactId && requestedArtifact === undefined)}
       more={more}
       loadMore={loadMore}
     />

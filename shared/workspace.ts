@@ -135,12 +135,15 @@ export const emptyData: Data = {
   incoming: [],
 };
 export type Route = {
+  promptId?: string;
   artifactId?: string;
   page: "Overview" | "Chat" | "Prompt" | "Artifact" | "Project";
   projectId?: string;
   chatId?: string;
 };
+export type SearchResult = { promptId?: string; id: string; kind: string; title: string; projectId?: string; chatId?: string; artifactId?: string };
 export type Actions = {
+  searchWorkspace?(text: string): Promise<SearchResult[]>;
   importPolicies(projectId: string, input: PolicyImport): Promise<void>;
   searchPolicies(projectId: string, text: string): Promise<PolicyRow[]>;
   createProject(name: string, description: string): Promise<string>;

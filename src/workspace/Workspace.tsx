@@ -1,4 +1,6 @@
 import { useChatDraft } from "./useChatDraft";
+import WorkspaceSearch from "./WorkspaceSearch";
+import { loadPreference, preferenceKey, savePreference } from "./preferences";
 import DocumentReply, { AttachmentCard } from "./DocumentReply";
 import { createPdfAttachment } from "./pdfDocument";
 import { isDocumentRequest } from "../../shared/documents";
@@ -35,11 +37,6 @@ type Props = {
   more?: boolean;
 };
 type Pin = { id: string; title: string; route: Route };
-const demoChatGPTModel: AIRequest["model"] = {
-  id: "gpt-5.6-luna",
-  name: "GPT-5.6-Luna",
-  provider: "chatgpt",
-};
 const date = (value: number) =>
   new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -67,32 +64,12 @@ export default function Workspace({
   loadMore,
   more,
 }: Props) {
-  const demoModelKey = `artifactos-demo-model-${userId}`;
-  const [ai, setAI] = useState<AIRequest | undefined>(() => {
-    if (local && import.meta.env.DEV) {
-      try {
-        if (localStorage.getItem(demoModelKey) === demoChatGPTModel.id)
-          return { model: demoChatGPTModel };
-      } catch {
-        /* Model selection still works when browser storage is unavailable. */
-      }
-    }
-    return undefined;
-  });
+  const preferencesScope = preferenceKey(userId, `${local ? 'local' : 'shared'}:${route.projectId || 'personal'}`);
+  const [selection, setSelection] = useState<{ scope: string; value?: AIRequest }>(() => ({ scope: preferencesScope, value: loadPreference(localStorage, preferencesScope) }));
+  const ai = selection.scope === preferencesScope ? selection.value : loadPreference(localStorage, preferencesScope);
   function chooseAI(next?: AIRequest) {
-    setAI(next);
-    if (local && import.meta.env.DEV) {
-      try {
-        if (
-          next?.model.provider === "chatgpt" &&
-          next.model.id === demoChatGPTModel.id
-        )
-          localStorage.setItem(demoModelKey, demoChatGPTModel.id);
-        else localStorage.removeItem(demoModelKey);
-      } catch {
-        /* Keep the in-memory choice if preferences cannot be persisted. */
-      }
-    }
+    setSelection({ scope: preferencesScope, value: next });
+    try { savePreference(localStorage, preferencesScope, next); } catch { /* In-memory selection remains available. */ }
   }
   const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
@@ -409,10 +386,13 @@ export default function Workspace({
               </button>
             </div>
           ))}
+          <WorkspaceSearch data={data} actions={actions} navigate={navigate} />
           {loading ? (
             <div className="empty">
               <h3>Loading workspace…</h3>
             </div>
+          ) : (route.projectId && !project) || (route.chatId && !chat) || (route.artifactId && !data.artifacts.some(a => a.id === route.artifactId)) || (route.promptId && !data.prompts.some(p => p.id === route.promptId && p.chatId === route.chatId)) ? (
+            <Empty title="Destination unavailable" text="This item is missing or you no longer have access." action="Back to workspace" onClick={() => navigate({ page: 'Overview' })} />
           ) : route.page === "Overview" ? (
             <>
               <div className="heading">
@@ -431,8 +411,8 @@ export default function Workspace({
                 <label className="search">
                   ⌕{" "}
                   <input
-                    aria-label="Search workspace"
-                    placeholder="Search your workspace…"
+                    aria-label="Filter overview"
+                    placeholder="Filter overview lists…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -585,7 +565,7 @@ export default function Workspace({
             </>
           ) : route.page === "Chat" ? (
             <ChatView
-              ai={ai}
+              ai={ai ? { ...ai, apiKey: ai.model.provider === "gemini" ? geminiKey : undefined } : undefined}
               aiControls={
                 <AIControls
                   apiKey={geminiKey}
@@ -1459,6 +1439,9 @@ function ChatView({
   const prompts = data.prompts
     .filter((p) => p.chatId === route.chatId)
     .sort((a, b) => a.createdAt - b.createdAt);
+  useEffect(() => {
+    if (route.promptId) document.getElementById(`prompt-${route.promptId}`)?.scrollIntoView({ block: 'center' });
+  }, [route.promptId, data.prompts]);
   const commits = data.commits.filter((c) => c.chatId === route.chatId);
   const project = data.projects.find(
     (p) => p.id === (chat?.projectId || projectId),
@@ -1594,13 +1577,18 @@ function ChatView({
             </div>
           ) : (
             prompts.map((p) => (
-              <article className="chat-turn" key={p.id}>
+              <article className="chat-turn" id={`prompt-${p.id}`} key={p.id} style={p.id === route.promptId ? { outline: "2px solid #777" } : undefined}>
                 <div className="message-meta">
                   <span className="account-avatar">{p.author.slice(0, 1)}</span>
                   <strong>{p.author}</strong>
                   <time>{date(p.createdAt)}</time>
                 </div>
                 <pre className="user-message">{p.text}</pre>
+                <div className="message-actions">
+                  {canWrite && <button className="subtle" disabled={busy} onClick={() => { setText(p.text); document.getElementById('chat-composer')?.focus(); }}>Reuse prompt</button>}
+                  {p.reply && <CopyText text={p.reply} label="Copy response" />}
+                  {p.result && <CopyText text={p.result} label="Copy result" />}
+                </div>
                 {p.reply && (
                   <div className="result-message">
                     <div className="message-meta">
@@ -1750,7 +1738,7 @@ function ChatView({
                   ? `Message in ${project.name}…`
                   : "Ask anything, or choose a project above…"
               }
-              value={text}
+              id="chat-composer" value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
               required
@@ -2132,4 +2120,12 @@ function ModelDetails({ model }: { model: ModelProvenance }) {
       <PolicySources citations={model.policyCitations} />
     </div>
   );
+}
+
+function CopyText({ text, label }: { text: string; label: string }) {
+  const [status, setStatus] = useState('');
+  return <><button className="subtle" onClick={async () => {
+    try { await navigator.clipboard.writeText(text); setStatus('Copied.'); }
+    catch { setStatus('Could not copy. Select the response text and copy manually.'); }
+  }}>{label}</button><span role="status">{status}</span></>;
 }

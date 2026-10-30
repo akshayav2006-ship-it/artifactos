@@ -1,0 +1,40 @@
+/// <reference types="vite/client" />
+import { convexTest } from 'convex-test';
+import { expect, test } from 'vitest';
+import schema from './schema';
+import { api } from './_generated/api';
+const modules = import.meta.glob('./**/*.ts');
+test('search and URL resolution enforce account/project isolation and recover malformed links', async () => {
+  const t = convexTest(schema, modules);
+  const alice = t.withIdentity({ subject: 'alice' });
+  const bob = t.withIdentity({ subject: 'bob' });
+  const aliceId = await alice.mutation(api.users.syncCurrentUser, { name: 'Alice', email: '' });
+  const bobId = await bob.mutation(api.users.syncCurrentUser, { name: 'Bob', email: '' });
+  const projectId = await alice.mutation(api.projects.create, { name: 'Needle research', description: '' });
+  const ids = await t.run(async ctx => {
+    const chatId = await ctx.db.insert('workChats', { projectId, authorId: aliceId, author: 'Alice', title: 'Needle chat', createdAt: 1, agentThreadId: 'test' });
+    const promptId = await ctx.db.insert('workPrompts', { projectId, chatId, authorId: aliceId, author: 'Alice', text: 'Needle prompt', result: '', status: 'saved', createdAt: 1 });
+    const personal = await ctx.db.insert('workChats', { authorId: aliceId, author: 'Alice', title: 'Needle personal', createdAt: 1, agentThreadId: 'test' });
+    const commitId = await ctx.db.insert('workCommits', { projectId, chatId, promptId, authorId: aliceId, author: 'Alice', title: 'Needle artifact', body: 'Body content', message: 'test', createdAt: 1 });
+    const artifactId = await ctx.db.insert('workArtifacts', { projectId, chatId, promptId, commitId, authorId: aliceId, author: 'Alice', title: 'Needle artifact', body: 'Body content', message: 'test', createdAt: 1, status: 'pending' });
+    return { chatId, personal, promptId, artifactId };
+  });
+  expect((await alice.query(api.navigation.search, { text: 'Needle' })).map(r => r.kind)).toEqual(expect.arrayContaining(['Project', 'Chat', 'Prompt', 'Artifact']));
+  expect(await alice.query(api.navigation.prompt, { id: ids.promptId })).toMatchObject({ id: ids.promptId });
+  expect(await bob.query(api.navigation.prompt, { id: ids.promptId })).toBeNull();
+  expect(await bob.query(api.navigation.resolve, { artifact: ids.artifactId })).toBeNull();
+  expect(await alice.query(api.navigation.resolve, { artifact: ids.artifactId })).toEqual({ projectId, artifactId: ids.artifactId });
+  expect(await bob.query(api.navigation.search, { text: 'Needle' })).toEqual([]);
+  expect(await bob.query(api.navigation.resolve, { chat: ids.chatId })).toBeNull();
+  expect(await bob.query(api.navigation.resolve, { chat: ids.personal })).toBeNull();
+  expect(await bob.query(api.navigation.resolve, { project: projectId, chat: ids.personal })).toBeNull();
+  expect(await alice.query(api.navigation.resolve, { project: projectId, chat: ids.personal })).toBeNull();
+  expect(await alice.query(api.navigation.resolve, { chat: ids.chatId })).toEqual({ projectId, chatId: ids.chatId });
+  expect(await alice.query(api.navigation.resolve, { project: 'malformed' })).toBeNull();
+  expect(await alice.query(api.navigation.resolve, { chat: 'malformed' })).toBeNull();
+  await t.run(async ctx => { await ctx.db.insert('projectMembers', { projectId, userId: bobId, role: 'viewer', joinedAt: 1 }); });
+  expect((await bob.query(api.navigation.search, { text: 'Needle' })).some(r => r.id === ids.chatId)).toBe(true);
+  expect((await bob.query(api.navigation.search, { text: 'Needle' })).some(r => r.id === ids.personal)).toBe(false);
+  await t.run(async ctx => { const m = await ctx.db.query('projectMembers').withIndex('by_project_id_and_user_id', q => q.eq('projectId', projectId).eq('userId', bobId)).unique(); await ctx.db.delete(m!._id); });
+  expect(await bob.query(api.navigation.resolve, { project: projectId, chat: ids.chatId })).toBeNull();
+});

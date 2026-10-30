@@ -1,8 +1,8 @@
-import DocumentReply, { AttachmentCard } from './DocumentReply';
-import { createPdfAttachment } from './pdfDocument';
-import { isDocumentRequest } from '../../shared/documents';
+import DocumentReply, { AttachmentCard } from "./DocumentReply";
+import { createPdfAttachment } from "./pdfDocument";
+import { isDocumentRequest } from "../../shared/documents";
 import PolicySheets, { PolicySources } from "./PolicySheets";
-import { GoogleSources, GroundedText } from './GoogleSources';
+import { GoogleSources, GroundedText } from "./GoogleSources";
 import AIControls from "./AIControls";
 import type { AIRequest, ModelProvenance } from "../../shared/ai";
 import { ConvexError } from "convex/values";
@@ -34,7 +34,11 @@ type Props = {
   more?: boolean;
 };
 type Pin = { id: string; title: string; route: Route };
-const demoChatGPTModel: AIRequest["model"] = { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", provider: "chatgpt" };
+const demoChatGPTModel: AIRequest["model"] = {
+  id: "gpt-5.6-luna",
+  name: "GPT-5.6-Luna",
+  provider: "chatgpt",
+};
 const date = (value: number) =>
   new Date(value).toLocaleString(undefined, {
     month: "short",
@@ -66,8 +70,11 @@ export default function Workspace({
   const [ai, setAI] = useState<AIRequest | undefined>(() => {
     if (local && import.meta.env.DEV) {
       try {
-        if (localStorage.getItem(demoModelKey) === demoChatGPTModel.id) return { model: demoChatGPTModel };
-      } catch { /* Model selection still works when browser storage is unavailable. */ }
+        if (localStorage.getItem(demoModelKey) === demoChatGPTModel.id)
+          return { model: demoChatGPTModel };
+      } catch {
+        /* Model selection still works when browser storage is unavailable. */
+      }
     }
     return undefined;
   });
@@ -75,9 +82,15 @@ export default function Workspace({
     setAI(next);
     if (local && import.meta.env.DEV) {
       try {
-        if (next?.model.provider === "chatgpt" && next.model.id === demoChatGPTModel.id) localStorage.setItem(demoModelKey, demoChatGPTModel.id);
+        if (
+          next?.model.provider === "chatgpt" &&
+          next.model.id === demoChatGPTModel.id
+        )
+          localStorage.setItem(demoModelKey, demoChatGPTModel.id);
         else localStorage.removeItem(demoModelKey);
-      } catch { /* Keep the in-memory choice if preferences cannot be persisted. */ }
+      } catch {
+        /* Keep the in-memory choice if preferences cannot be persisted. */
+      }
     }
   }
   const [geminiKey, setGeminiKey] = useState("");
@@ -213,115 +226,117 @@ export default function Workspace({
             </button>
           ))}
         </nav>
-        <div className="sidebar-group">
-          <button
-            className="group-label"
-            aria-expanded={pinsOpen}
-            onClick={() => setPinsOpen(!pinsOpen)}
-          >
-            <span>{pinsOpen ? "⌄" : "›"} &nbsp;Pinned</span>
-          </button>
-          {pinsOpen && (
-            <div className="sidebar-items">
-              {pins.length ? (
-                pins.map((p) => (
-                  <div className="sidebar-item" key={p.id}>
-                    <button onClick={() => navigate(p.route)}>
-                      <span>♧</span>
-                      <span>{p.title}</span>
-                    </button>
-                    <button
-                      className="item-action"
-                      aria-label={`Unpin ${p.title}`}
-                      onClick={() => pin(p.id, p.title, p.route)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="sidebar-empty">
-                  Pin a project or chat for quick access.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="sidebar-group">
-          <div className="group-heading">
+        <div className="sidebar-scroll">
+          <div className="sidebar-group">
             <button
               className="group-label"
-              aria-expanded={projectsOpen}
-              onClick={() => setProjectsOpen(!projectsOpen)}
+              aria-expanded={pinsOpen}
+              onClick={() => setPinsOpen(!pinsOpen)}
             >
-              <span>{projectsOpen ? "⌄" : "›"} &nbsp;Projects</span>
+              <span>{pinsOpen ? "⌄" : "›"} &nbsp;Pinned</span>
             </button>
-            <button
-              className="add-project"
-              onClick={() => setModal("project")}
-              aria-label="Create project"
-            >
-              ＋
-            </button>
+            {pinsOpen && (
+              <div className="sidebar-items">
+                {pins.length ? (
+                  pins.map((p) => (
+                    <div className="sidebar-item" key={p.id}>
+                      <button onClick={() => navigate(p.route)}>
+                        <span>♧</span>
+                        <span>{p.title}</span>
+                      </button>
+                      <button
+                        className="item-action"
+                        aria-label={`Unpin ${p.title}`}
+                        onClick={() => pin(p.id, p.title, p.route)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="sidebar-empty">
+                    Pin a project or chat for quick access.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
-          {projectsOpen && (
-            <div className="sidebar-items">
-              {data.projects.map((p) => (
-                <div
-                  className={`sidebar-item ${route.projectId === p.id ? "selected" : ""}`}
-                  key={p.id}
-                >
-                  <button
-                    onClick={() =>
-                      navigate({ page: "Project", projectId: p.id })
-                    }
-                  >
-                    <span>▱</span>
-                    <span>{p.name}</span>
-                  </button>
-                  {pinButton(p.id, p.name, {
-                    page: "Project",
-                    projectId: p.id,
-                  })}
-                </div>
-              ))}
-              {!data.projects.length && (
-                <button
-                  className="sidebar-create"
-                  onClick={() => setModal("project")}
-                >
-                  ＋ Create your first project
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="sidebar-group recent-group">
-          <div className="group-label">Recent chats</div>
-          {data.chats.slice(0, 8).map((c) => (
-            <div
-              className={`sidebar-item ${route.chatId === c.id ? "selected" : ""}`}
-              key={c.id}
-            >
+          <div className="sidebar-group">
+            <div className="group-heading">
               <button
-                onClick={() =>
-                  navigate({
-                    page: "Chat",
-                    chatId: c.id,
-                    projectId: c.projectId || undefined,
-                  })
-                }
+                className="group-label"
+                aria-expanded={projectsOpen}
+                onClick={() => setProjectsOpen(!projectsOpen)}
               >
-                <span>◌</span>
-                <span>{c.title}</span>
+                <span>{projectsOpen ? "⌄" : "›"} &nbsp;Projects</span>
               </button>
-              {pinButton(c.id, c.title, {
-                page: "Chat",
-                chatId: c.id,
-                projectId: c.projectId || undefined,
-              })}
+              <button
+                className="add-project"
+                onClick={() => setModal("project")}
+                aria-label="Create project"
+              >
+                ＋
+              </button>
             </div>
-          ))}
+            {projectsOpen && (
+              <div className="sidebar-items">
+                {data.projects.map((p) => (
+                  <div
+                    className={`sidebar-item ${route.projectId === p.id ? "selected" : ""}`}
+                    key={p.id}
+                  >
+                    <button
+                      onClick={() =>
+                        navigate({ page: "Project", projectId: p.id })
+                      }
+                    >
+                      <span>▱</span>
+                      <span>{p.name}</span>
+                    </button>
+                    {pinButton(p.id, p.name, {
+                      page: "Project",
+                      projectId: p.id,
+                    })}
+                  </div>
+                ))}
+                {!data.projects.length && (
+                  <button
+                    className="sidebar-create"
+                    onClick={() => setModal("project")}
+                  >
+                    ＋ Create your first project
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="sidebar-group recent-group">
+            <div className="group-label">Recent chats</div>
+            {data.chats.slice(0, 8).map((c) => (
+              <div
+                className={`sidebar-item ${route.chatId === c.id ? "selected" : ""}`}
+                key={c.id}
+              >
+                <button
+                  onClick={() =>
+                    navigate({
+                      page: "Chat",
+                      chatId: c.id,
+                      projectId: c.projectId || undefined,
+                    })
+                  }
+                >
+                  <span>◌</span>
+                  <span>{c.title}</span>
+                </button>
+                {pinButton(c.id, c.title, {
+                  page: "Chat",
+                  chatId: c.id,
+                  projectId: c.projectId || undefined,
+                })}
+              </div>
+            ))}
+          </div>
         </div>
         <div className="sidebar-account">{account}</div>
       </aside>
@@ -353,8 +368,22 @@ export default function Workspace({
           )}
           {(data.approvals || []).map((a) => (
             <div className="invitation-banner" key={a.id}>
-              <span><strong>{a.title}</strong> by {a.author} in {a.projectName} needs your approval.</span>
-              <button className="primary" onClick={() => navigate({ page: "Artifact", projectId: a.projectId, artifactId: a.id })}>Review submission</button>
+              <span>
+                <strong>{a.title}</strong> by {a.author} in {a.projectName}{" "}
+                needs your approval.
+              </span>
+              <button
+                className="primary"
+                onClick={() =>
+                  navigate({
+                    page: "Artifact",
+                    projectId: a.projectId,
+                    artifactId: a.id,
+                  })
+                }
+              >
+                Review submission
+              </button>
             </div>
           ))}
           {data.incoming.map((i) => (
@@ -411,7 +440,11 @@ export default function Workspace({
                   ["Projects", data.projects.length, "Project"],
                   ["Conversations", data.chats.length, "Chat"],
                   ["Artifacts", data.artifacts.length, "Artifact"],
-                  ["Prompt history", data.prompts.filter(p => p.saved !== false).length, "Prompt"],
+                  [
+                    "Prompt history",
+                    data.prompts.filter((p) => p.saved !== false).length,
+                    "Prompt",
+                  ],
                 ].map(([name, count, page]) => (
                   <button
                     key={name}
@@ -549,7 +582,16 @@ export default function Workspace({
           ) : route.page === "Chat" ? (
             <ChatView
               ai={ai}
-              aiControls={<AIControls apiKey={geminiKey} setApiKey={setGeminiKey} local={local} value={ai} onChange={chooseAI} busy={busy} />}
+              aiControls={
+                <AIControls
+                  apiKey={geminiKey}
+                  setApiKey={setGeminiKey}
+                  local={local}
+                  value={ai}
+                  onChange={chooseAI}
+                  busy={busy}
+                />
+              }
               key={route.chatId || `new-${route.projectId || "personal"}`}
               data={data}
               route={route}
@@ -759,7 +801,9 @@ export default function Workspace({
                   Contributor — chat, commit, and push
                 </option>
                 <option value="admin">Admin — manage and verify</option>
-                <option value="reviewer">Reviewer — approve assigned submissions</option>
+                <option value="reviewer">
+                  Reviewer — approve assigned submissions
+                </option>
                 <option value="viewer">Viewer — read only</option>
               </select>
             </label>
@@ -791,9 +835,11 @@ function Section({
   return (
     <div className="section-head">
       <h2>{title}</h2>
-      {action && <button className="subtle" onClick={onClick}>
-        ＋ {action}
-      </button>}
+      {action && (
+        <button className="subtle" onClick={onClick}>
+          ＋ {action}
+        </button>
+      )}
     </div>
   );
 }
@@ -878,7 +924,9 @@ function ProjectView({
 }) {
   const [tab, setTab] = useState("Artifacts");
   const artifacts = data.artifacts.filter((a) => a.projectId === project.id);
-  const prompts = data.prompts.filter((p) => p.saved !== false && p.projectId === project.id);
+  const prompts = data.prompts.filter(
+    (p) => p.saved !== false && p.projectId === project.id,
+  );
   const chats = data.chats.filter((c) => c.projectId === project.id);
   const members = data.members.filter((m) => m.projectId === project.id);
   const canWrite = ["owner", "admin", "member"].includes(project.role);
@@ -996,7 +1044,9 @@ function ProjectView({
         <section className="panel">
           <Section
             title="Project collaborators"
-            action={["owner", "admin"].includes(project.role) ? "Invite" : undefined}
+            action={
+              ["owner", "admin"].includes(project.role) ? "Invite" : undefined
+            }
             onClick={invite}
           />
           {members.length ? (
@@ -1054,7 +1104,7 @@ function PromptList({
 }) {
   const [search, setSearch] = useState("");
   const rows = prompts
-    .filter(p => p.saved !== false)
+    .filter((p) => p.saved !== false)
     .filter((p) =>
       `${p.text} ${p.author}`.toLowerCase().includes(search.toLowerCase()),
     )
@@ -1156,7 +1206,10 @@ function ArtifactList({
 }) {
   const [filter, setFilter] = useState("all");
   const rows = artifacts
-    .filter((a) => a.id === selectedArtifactId || filter === "all" || a.status === filter)
+    .filter(
+      (a) =>
+        a.id === selectedArtifactId || filter === "all" || a.status === filter,
+    )
     .sort((a, b) => b.createdAt - a.createdAt);
   return (
     <section className="panel library-panel">
@@ -1179,7 +1232,11 @@ function ArtifactList({
       </div>
       {rows.length ? (
         rows.map((a) => (
-          <details className="artifact-item" key={a.id} open={a.id === selectedArtifactId || undefined}>
+          <details
+            className="artifact-item"
+            key={a.id}
+            open={a.id === selectedArtifactId || undefined}
+          >
             <summary>
               <span className="artifact-file-icon">◇</span>
               <span className="prompt-summary">
@@ -1203,18 +1260,61 @@ function ArtifactList({
               </div>
               {a.status === "pending" && !local && a.approvers && (
                 <div className="review-help">
-                  {a.approvers.length ? <>Assigned approvers: {a.approvers.map(p => `${p.name} (${p.delivery === "not_configured" ? "email unavailable; notified in workspace" : p.delivery === "failed" ? "email failed; notified in workspace" : `email ${p.delivery}`})`).join(", ")}. {a.approvers.filter(p => p.decision === "verified").length}/{a.requiredApprovals ?? 1} approvals received. {a.requiredApprovals ? "Every required approver must approve." : "One assigned owner or admin review completes this request."}</> : "No eligible approvers are assigned. Add another project owner or admin to review this contribution."}
+                  {a.approvers.length ? (
+                    <>
+                      Assigned approvers:{" "}
+                      {a.approvers
+                        .map(
+                          (p) =>
+                            `${p.name} (${p.delivery === "not_configured" ? "email unavailable; notified in workspace" : p.delivery === "failed" ? "email failed; notified in workspace" : `email ${p.delivery}`})`,
+                        )
+                        .join(", ")}
+                      .{" "}
+                      {
+                        a.approvers.filter((p) => p.decision === "verified")
+                          .length
+                      }
+                      /{a.requiredApprovals ?? 1} approvals received.{" "}
+                      {a.requiredApprovals
+                        ? "Every required approver must approve."
+                        : "One assigned owner or admin review completes this request."}
+                    </>
+                  ) : (
+                    "No eligible approvers are assigned. Add another project owner or admin to review this contribution."
+                  )}
                 </div>
               )}
-              {a.approvers?.filter(p => p.decision).map(p => (
-                <div className="review-record" key={p.userId}>
-                  <strong>{p.name}: {p.decision === "verified" ? "Approved" : "Changes requested"} · {p.score}/100</strong>
-                  <p>{p.feedback}</p>
-                  <small>{date(p.reviewedAt!)}</small>
-                </div>
-              ))}
-              {a.attachment ? <AttachmentCard attachment={a.attachment} /> : <GroundedText text={a.body} grounding={a.sourceModel?.grounding} />}
-              {!a.attachment && <button className="subtle" onClick={() => download(a.title, a.body)}>Download artifact ↓</button>}
+              {a.approvers
+                ?.filter((p) => p.decision)
+                .map((p) => (
+                  <div className="review-record" key={p.userId}>
+                    <strong>
+                      {p.name}:{" "}
+                      {p.decision === "verified"
+                        ? "Approved"
+                        : "Changes requested"}{" "}
+                      · {p.score}/100
+                    </strong>
+                    <p>{p.feedback}</p>
+                    <small>{date(p.reviewedAt!)}</small>
+                  </div>
+                ))}
+              {a.attachment ? (
+                <AttachmentCard attachment={a.attachment} />
+              ) : (
+                <GroundedText
+                  text={a.body}
+                  grounding={a.sourceModel?.grounding}
+                />
+              )}
+              {!a.attachment && (
+                <button
+                  className="subtle"
+                  onClick={() => download(a.title, a.body)}
+                >
+                  Download artifact ↓
+                </button>
+              )}
               {a.score !== undefined && (
                 <div className="review-record">
                   <strong>Trust score {a.score}/100</strong>
@@ -1226,7 +1326,11 @@ function ArtifactList({
               )}
               {a.status === "pending" &&
               !local &&
-              canReview(project.role, a.authorId, userId) && (a.approvers?.length ? a.approvers.some(p => p.userId === userId && !p.decision) : a.requiredApprovals === undefined && project.role !== "reviewer") ? (
+              canReview(project.role, a.authorId, userId) &&
+              (a.approvers?.length
+                ? a.approvers.some((p) => p.userId === userId && !p.decision)
+                : a.requiredApprovals === undefined &&
+                  project.role !== "reviewer") ? (
                 <form
                   className="review-form"
                   onSubmit={(e) => {
@@ -1338,7 +1442,10 @@ function ChatView({
   const chat = data.chats.find((c) => c.id === route.chatId);
   const [projectId, setProjectId] = useState(route.projectId || "");
   const [text, setText] = useState("");
-  const [policySelection, setPolicySelection] = useState<{ projectId: string; ids: string[] }>({ projectId: "", ids: [] });
+  const [policySelection, setPolicySelection] = useState<{
+    projectId: string;
+    ids: string[];
+  }>({ projectId: "", ids: [] });
   const [commitPrompt, setCommitPrompt] = useState<Prompt | null>(null);
   const [commitBody, setCommitBody] = useState("");
   const [commitAsPdf, setCommitAsPdf] = useState(false);
@@ -1370,11 +1477,25 @@ function ChatView({
           chatId: id,
           projectId: projectId || undefined,
         });
-        await actions.sendPrompt(id, message, ai ? { ...ai, policyIds: policySelection.projectId === project?.id ? policySelection.ids : [] } : undefined);
+        await actions.sendPrompt(
+          id,
+          message,
+          ai
+            ? {
+                ...ai,
+                policyIds:
+                  policySelection.projectId === project?.id
+                    ? policySelection.ids
+                    : [],
+              }
+            : undefined,
+        );
       },
-      ai ? undefined : local
-        ? "Prompt saved on this device."
-        : "Prompt saved to the project history.",
+      ai
+        ? undefined
+        : local
+          ? "Prompt saved on this device."
+          : "Prompt saved to the project history.",
     );
   }
   return (
@@ -1429,14 +1550,28 @@ function ChatView({
             Project is fixed after the first commit to preserve its history.
           </p>
         )}
-        {project && <PolicySheets key={project.id} projectId={project.id} actions={actions} canWrite={canWrite && !busy} selected={policySelection.projectId === project.id ? policySelection.ids : []} select={ids => setPolicySelection({ projectId: project.id, ids })} />}
+        {project && (
+          <PolicySheets
+            key={project.id}
+            projectId={project.id}
+            actions={actions}
+            canWrite={canWrite && !busy}
+            selected={
+              policySelection.projectId === project.id
+                ? policySelection.ids
+                : []
+            }
+            select={(ids) => setPolicySelection({ projectId: project.id, ids })}
+          />
+        )}
         <div className="chat-messages">
           {!prompts.length ? (
             <div className="chat-welcome">
               <div className="chat-mark">✳</div>
               <h1>What are we working on?</h1>
               <p>
-                Choose your model and chat. Save useful prompts, then attach results manually.
+                Choose your model and chat. Save useful prompts, then attach
+                results manually.
               </p>
               <div className="chat-suggestions">
                 <button onClick={() => setText("Help me explore ideas for ")}>
@@ -1461,9 +1596,23 @@ function ChatView({
                 <pre className="user-message">{p.text}</pre>
                 {p.reply && (
                   <div className="result-message">
-                    <div className="message-meta"><span>✳</span><strong>{p.replyProvenance?.requestedModel || "AI reply"}</strong></div>
-                    {isDocumentRequest(p.text) ? <DocumentReply text={p.reply} prompt={p.text} /> : <GroundedText text={p.reply} grounding={p.replyProvenance?.grounding} />}
-                    {p.replyProvenance && <ModelDetails model={p.replyProvenance} />}
+                    <div className="message-meta">
+                      <span>✳</span>
+                      <strong>
+                        {p.replyProvenance?.requestedModel || "AI reply"}
+                      </strong>
+                    </div>
+                    {isDocumentRequest(p.text) ? (
+                      <DocumentReply text={p.reply} prompt={p.text} />
+                    ) : (
+                      <GroundedText
+                        text={p.reply}
+                        grounding={p.replyProvenance?.grounding}
+                      />
+                    )}
+                    {p.replyProvenance && (
+                      <ModelDetails model={p.replyProvenance} />
+                    )}
                   </div>
                 )}
                 {p.result ? (
@@ -1479,40 +1628,85 @@ function ChatView({
                           : "Not scored"}
                       </span>
                     </div>
-                    <GroundedText text={p.result} grounding={p.provenance?.grounding} />
+                    <GroundedText
+                      text={p.result}
+                      grounding={p.provenance?.grounding}
+                    />
                     {p.provenance && <ModelDetails model={p.provenance} />}
                   </div>
                 ) : (
                   <div className="connection-note">
-                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "No result attached. Attach results manually when you want to keep them."}
+                    {p.status === "generating"
+                      ? "Generating a reply…"
+                      : p.status === "failed"
+                        ? p.error || "Reply failed. Try again."
+                        : "No result attached. Attach results manually when you want to keep them."}
                   </div>
                 )}
-                {data.responseVersions.some(v => v.promptId === p.id) && (
+                {data.responseVersions.some((v) => v.promptId === p.id) && (
                   <details className="response-history">
                     <summary>Response history</summary>
-                    {data.responseVersions.filter(v => v.promptId === p.id)
+                    {data.responseVersions
+                      .filter((v) => v.promptId === p.id)
                       .sort((a, b) => b.createdAt - a.createdAt)
-                      .map(version => (
+                      .map((version) => (
                         <section key={version.id} className="response-version">
                           <div className="message-meta">
-                            <strong>{version.source === "ai" ? "AI response" : version.source === "manual" ? "Manual result" : "Earlier saved result"}</strong>
-                            <span>{version.author} · {version.id.slice(-7)}</span>
+                            <strong>
+                              {version.source === "ai"
+                                ? "AI response"
+                                : version.source === "manual"
+                                  ? "Manual result"
+                                  : "Earlier saved result"}
+                            </strong>
+                            <span>
+                              {version.author} · {version.id.slice(-7)}
+                            </span>
                             <time>{date(version.createdAt)}</time>
-                            {p.currentVersionId === version.id && <span>Current</span>}
+                            {p.currentVersionId === version.id && (
+                              <span>Current</span>
+                            )}
                           </div>
-                          {version.provenance && <ModelDetails model={version.provenance} />}
-                          {version.source === "legacy" && <p className="muted">Preserved before replacement; original source and response time are unknown.</p>}
-                          <GroundedText text={version.body} grounding={version.provenance?.grounding} />
+                          {version.provenance && (
+                            <ModelDetails model={version.provenance} />
+                          )}
+                          {version.source === "legacy" && (
+                            <p className="muted">
+                              Preserved before replacement; original source and
+                              response time are unknown.
+                            </p>
+                          )}
+                          <GroundedText
+                            text={version.body}
+                            grounding={version.provenance?.grounding}
+                          />
                         </section>
                       ))}
                   </details>
                 )}
                 {canWrite && p.status !== "generating" && (
                   <div className="message-actions">
-                    <button className="subtle" disabled={busy || p.saved !== false} onClick={() => void run(() => actions.savePrompt(p.id), "Prompt saved to your prompt library.")}>
+                    <button
+                      className="subtle"
+                      disabled={busy || p.saved !== false}
+                      onClick={() =>
+                        void run(
+                          () => actions.savePrompt(p.id),
+                          "Prompt saved to your prompt library.",
+                        )
+                      }
+                    >
                       {p.saved !== false ? "✓ Prompt saved" : "Save prompt"}
                     </button>
-                    {p.status === "failed" && <button className="secondary" disabled={busy} onClick={() => setText(p.text)}>Retry prompt</button>}
+                    {p.status === "failed" && (
+                      <button
+                        className="secondary"
+                        disabled={busy}
+                        onClick={() => setText(p.text)}
+                      >
+                        Retry prompt
+                      </button>
+                    )}
                     <button
                       className="subtle"
                       onClick={() => setResultPrompt(p)}
@@ -1522,11 +1716,17 @@ function ChatView({
                     <button
                       className="secondary"
                       disabled={busy || !(p.reply || p.result)}
-                      onClick={() => { setCommitBody(p.reply || p.result); setCommitAsPdf(isDocumentRequest(p.text)); setCommitPrompt(p); }}
+                      onClick={() => {
+                        setCommitBody(p.reply || p.result);
+                        setCommitAsPdf(isDocumentRequest(p.text));
+                        setCommitPrompt(p);
+                      }}
                     >
                       ◇ Commit artifact
                     </button>
-                    {!project && <span>Choose a project in the commit dialog.</span>}
+                    {!project && (
+                      <span>Choose a project in the commit dialog.</span>
+                    )}
                   </div>
                 )}
               </article>
@@ -1556,11 +1756,29 @@ function ChatView({
             />
             <div className="composer-bottom">
               <span>
-                {busy && ai ? "Generating…" : ai?.model.name || "Prompt notebook"} <small>· {ai ? ai.model.provider === "chatgpt" ? "ChatGPT plan" : ai.model.provider === "groq" ? "Groq" : ai.model.provider === "openrouter" ? "OpenRouter" : "AI Studio key" : "save only"}</small>
+                {busy && ai
+                  ? "Generating…"
+                  : ai?.model.name || "Prompt notebook"}{" "}
+                <small>
+                  ·{" "}
+                  {ai
+                    ? ai.model.provider === "chatgpt"
+                      ? "ChatGPT plan"
+                      : ai.model.provider === "groq"
+                        ? "Groq"
+                        : ai.model.provider === "openrouter"
+                          ? "OpenRouter"
+                          : "AI Studio key"
+                    : "save only"}
+                </small>
               </span>
               <button
                 className={ai ? "send-button" : "secondary"}
-                disabled={busy || !text.trim() || (ai?.model.provider === "gemini" && !ai.apiKey?.trim())}
+                disabled={
+                  busy ||
+                  !text.trim() ||
+                  (ai?.model.provider === "gemini" && !ai.apiKey?.trim())
+                }
                 aria-label={ai ? "Send message" : "Save prompt"}
               >
                 {ai ? "↑" : "Save prompt"}
@@ -1570,8 +1788,8 @@ function ChatView({
               {project
                 ? "Prompts are shared with this project’s collaborators."
                 : "This chat stays outside projects until you choose one."}{" "}
-              Save selected prompts. Results must be attached manually.{" "}
-              ⌘/Ctrl + Enter to send.
+              Save selected prompts. Results must be attached manually. ⌘/Ctrl +
+              Enter to send.
             </p>
           </form>
         ) : (
@@ -1588,16 +1806,31 @@ function ChatView({
             <span className="count-pill">{commits.length}</span>
           </div>
           <p className="muted">
-            Save snapshots, select one final version for this chat, then submit it for review.
+            Save snapshots, select one final version for this chat, then submit
+            it for review.
           </p>
           {commits.length ? (
             commits.map((c) => (
               <CommitCard
                 key={c.id}
                 commit={c}
-                approvers={local ? undefined : data.members.filter(m => m.projectId === c.projectId && m.id !== c.authorId && ["owner", "admin", "reviewer"].includes(m.role))}
+                approvers={
+                  local
+                    ? undefined
+                    : data.members.filter(
+                        (m) =>
+                          m.projectId === c.projectId &&
+                          m.id !== c.authorId &&
+                          ["owner", "admin", "reviewer"].includes(m.role),
+                      )
+                }
                 isFinal={chat.finalCommitId === c.id}
-                selectFinal={() => run(() => actions.selectFinal(c.id), "Final version selected.")}
+                selectFinal={() =>
+                  run(
+                    () => actions.selectFinal(c.id),
+                    "Final version selected.",
+                  )
+                }
                 pushed={
                   !!c.pushed || data.artifacts.some((a) => a.commitId === c.id)
                 }
@@ -1606,7 +1839,9 @@ function ChatView({
                 push={(approverIds) =>
                   run(
                     () => actions.push(c.id, approverIds),
-                    local ? "Final version submitted locally. Sign in to a shared project to request approval." : "Final version submitted. All selected approvers must approve; email status is shown on the artifact.",
+                    local
+                      ? "Final version submitted locally. Sign in to a shared project to request approval."
+                      : "Final version submitted. All selected approvers must approve; email status is shown on the artifact.",
                   )
                 }
               />
@@ -1662,9 +1897,13 @@ function ChatView({
               e.preventDefault();
               const f = new FormData(e.currentTarget);
               void run(async () => {
-                if (!project) throw new Error("Choose a project before committing.");
-                if (!chat!.projectId) await actions.assignChat(chat!.id, project.id);
-                const attachment = commitAsPdf ? await createPdfAttachment(commitBody, commitPrompt.text) : undefined;
+                if (!project)
+                  throw new Error("Choose a project before committing.");
+                if (!chat!.projectId)
+                  await actions.assignChat(chat!.id, project.id);
+                const attachment = commitAsPdf
+                  ? await createPdfAttachment(commitBody, commitPrompt.text)
+                  : undefined;
                 await actions.commit(
                   chat!.id,
                   commitPrompt.id,
@@ -1679,31 +1918,65 @@ function ChatView({
             }}
           >
             <p className="muted">
-              A commit is a fixed snapshot. Create as many as you need; only
-              the selected final version can be submitted to the artifact library.
+              A commit is a fixed snapshot. Create as many as you need; only the
+              selected final version can be submitted to the artifact library.
             </p>
-            <label>Project
-              <select aria-label="Commit project" value={project?.id || ""} disabled={!!chat?.projectId} onChange={e => setProjectId(e.target.value)} required>
+            <label>
+              Project
+              <select
+                aria-label="Commit project"
+                value={project?.id || ""}
+                disabled={!!chat?.projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                required
+              >
                 <option value="">Choose a project</option>
-                {data.projects.filter(p => ["owner", "admin", "member"].includes(p.role)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {data.projects
+                  .filter((p) => ["owner", "admin", "member"].includes(p.role))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
               </select>
             </label>
             <label>
               Artifact name
               <input
                 autoFocus
-                defaultValue={commitPrompt.text.slice(0,120)}
+                defaultValue={commitPrompt.text.slice(0, 120)}
                 name="title"
                 required
                 maxLength={120}
                 placeholder="e.g. Research summary"
               />
             </label>
-            {commitAsPdf ? <section aria-label="PDF attachment"><DocumentReply text={commitBody} prompt={commitPrompt.text} /><p className="muted">Only this PDF will be attached to the commit.</p></section> : <label>
-              Text attachment · edit before committing
-              <textarea name="body" value={commitBody} onChange={e => setCommitBody(e.target.value)} required rows={8} maxLength={12000} />
-            </label>}
-            {!commitAsPdf && <details><summary>Formatted preview</summary><GroundedText text={commitBody} /></details>}
+            {commitAsPdf ? (
+              <section aria-label="PDF attachment">
+                <DocumentReply text={commitBody} prompt={commitPrompt.text} />
+                <p className="muted">
+                  Only this PDF will be attached to the commit.
+                </p>
+              </section>
+            ) : (
+              <label>
+                Text attachment · edit before committing
+                <textarea
+                  name="body"
+                  value={commitBody}
+                  onChange={(e) => setCommitBody(e.target.value)}
+                  required
+                  rows={8}
+                  maxLength={12000}
+                />
+              </label>
+            )}
+            {!commitAsPdf && (
+              <details>
+                <summary>Formatted preview</summary>
+                <GroundedText text={commitBody} />
+              </details>
+            )}
             <label>
               Commit message
               <input
@@ -1713,7 +1986,10 @@ function ChatView({
                 placeholder="What does this version contain?"
               />
             </label>
-            <button className="primary" disabled={busy || !project || !commitBody.trim()}>
+            <button
+              className="primary"
+              disabled={busy || !project || !commitBody.trim()}
+            >
               {busy ? "Creating commit…" : "Create commit"}
             </button>
           </form>
@@ -1742,8 +2018,8 @@ function CommitCard({
   push: (approverIds?: string[]) => Promise<boolean>;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
-  const eligibleIds = new Set(approvers?.map(m => m.id));
-  const requiredIds = selected.filter(id => eligibleIds.has(id));
+  const eligibleIds = new Set(approvers?.map((m) => m.id));
+  const requiredIds = selected.filter((id) => eligibleIds.has(id));
   return (
     <div className="commit-card">
       <div className="commit-card-title">
@@ -1756,9 +2032,23 @@ function CommitCard({
       </small>
       <details>
         <summary>View snapshot · {commit.id.slice(-7)}</summary>
-        {commit.sourceVersionId && <p>Source response · {commit.sourceVersionId.slice(-7)}</p>}
-        {commit.sourceModel && <><p>Source model</p><ModelDetails model={commit.sourceModel} /></>}
-        {commit.attachment ? <AttachmentCard attachment={commit.attachment} /> : <GroundedText text={commit.body} grounding={commit.sourceModel?.grounding} />}
+        {commit.sourceVersionId && (
+          <p>Source response · {commit.sourceVersionId.slice(-7)}</p>
+        )}
+        {commit.sourceModel && (
+          <>
+            <p>Source model</p>
+            <ModelDetails model={commit.sourceModel} />
+          </>
+        )}
+        {commit.attachment ? (
+          <AttachmentCard attachment={commit.attachment} />
+        ) : (
+          <GroundedText
+            text={commit.body}
+            grounding={commit.sourceModel?.grounding}
+          />
+        )}
       </details>
       {isFinal && <span className="final-version-label">✓ Final version</span>}
       {canWrite && !isFinal && (
@@ -1770,16 +2060,40 @@ function CommitCard({
         <span className="pushed-label">✓ Submitted for review</span>
       ) : canWrite ? (
         <>
-          {approvers && isFinal && <fieldset disabled={busy}>
-            <legend>Required approvers</legend>
-            <p className="muted">Select everyone who must approve this submission.</p>
-            {approvers.map(m => <label key={m.id}>
-              <input type="checkbox" checked={requiredIds.includes(m.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, m.id] : ids.filter(id => id !== m.id))} />
-              {m.name} ({m.role}) · {m.email}
-            </label>)}
-            {!approvers.length && <p className="muted">Add another owner, admin, or reviewer before submitting.</p>}
-          </fieldset>}
-          <button className="secondary" disabled={busy || !isFinal || (!!approvers && !requiredIds.length)} onClick={() => void push(approvers ? requiredIds : undefined)}>
+          {approvers && isFinal && (
+            <fieldset disabled={busy}>
+              <legend>Required approvers</legend>
+              <p className="muted">
+                Select everyone who must approve this submission.
+              </p>
+              {approvers.map((m) => (
+                <label key={m.id}>
+                  <input
+                    type="checkbox"
+                    checked={requiredIds.includes(m.id)}
+                    onChange={(e) =>
+                      setSelected((ids) =>
+                        e.target.checked
+                          ? [...ids, m.id]
+                          : ids.filter((id) => id !== m.id),
+                      )
+                    }
+                  />
+                  {m.name} ({m.role}) · {m.email}
+                </label>
+              ))}
+              {!approvers.length && (
+                <p className="muted">
+                  Add another owner, admin, or reviewer before submitting.
+                </p>
+              )}
+            </fieldset>
+          )}
+          <button
+            className="secondary"
+            disabled={busy || !isFinal || (!!approvers && !requiredIds.length)}
+            onClick={() => void push(approvers ? requiredIds : undefined)}
+          >
             ↑ Submit final version
           </button>
         </>
@@ -1791,10 +2105,23 @@ function CommitCard({
 }
 
 function ModelDetails({ model }: { model: ModelProvenance }) {
-  return <div className="model-provenance">
-    <span>{model.provider === "gemini" ? "Gemini" : model.provider === "groq" ? "Groq" : model.provider === "openrouter" ? "OpenRouter" : "ChatGPT"} · Requested: {model.requestedModel}</span>
-    <span>Reported model/version: {model.resolvedModel || "Not provided"}</span>
-    <GoogleSources grounding={model.grounding} />
-    <PolicySources citations={model.policyCitations} />
-  </div>;
+  return (
+    <div className="model-provenance">
+      <span>
+        {model.provider === "gemini"
+          ? "Gemini"
+          : model.provider === "groq"
+            ? "Groq"
+            : model.provider === "openrouter"
+              ? "OpenRouter"
+              : "ChatGPT"}{" "}
+        · Requested: {model.requestedModel}
+      </span>
+      <span>
+        Reported model/version: {model.resolvedModel || "Not provided"}
+      </span>
+      <GoogleSources grounding={model.grounding} />
+      <PolicySources citations={model.policyCitations} />
+    </div>
+  );
 }

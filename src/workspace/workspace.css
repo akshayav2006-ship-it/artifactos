@@ -16,9 +16,18 @@
   border-right: 1px solid #303030;
   padding: 17px 12px 12px;
   gap: 0;
+  overflow: hidden;
+  height: 100dvh;
+}
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
 }
 .sidebar-top {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -44,6 +53,7 @@
   padding: 4px;
 }
 .codex-shell .primary-nav {
+  flex-shrink: 0;
   display: grid;
   gap: 3px;
 }
@@ -149,12 +159,14 @@
   padding: 10px;
 }
 .recent-group {
-  flex: 1;
-  min-height: 60px;
+  padding-bottom: 12px;
 }
 .sidebar-account {
+  flex-shrink: 0;
   margin-top: auto;
-  padding-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #303030;
+  background: #202020;
 }
 .account-control {
   display: flex;
@@ -973,6 +985,10 @@
     border-right: 0;
     border-bottom: 1px solid #373737;
     overflow: visible;
+  }
+  .sidebar-scroll {
+    overflow: visible;
+    flex: none;
   }
   .sidebar-top {
     padding: 2px 3px 15px;

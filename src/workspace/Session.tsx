@@ -1,3 +1,5 @@
+import { OperationPending } from "../../shared/pending";
+const sends = new OperationPending();
 import { AuthLanding } from '../features/auth/AuthLanding';
 import { Component, useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -288,6 +290,8 @@ function Remote({
   const assign = useMutation(api.workspace.assignChat);
   const send = useMutation(api.workspace.sendPrompt);
   const generate = useAction(api.ai.reply);
+  const prepare = useMutation(api.ai.prepare);
+  const cancelGeneration = useMutation(api.ai.cancel);
   const savePrompt = useMutation(api.workspace.savePrompt);
   const result = useMutation(api.workspace.addResult);
   const commit = useMutation(api.workspace.commit);
@@ -312,12 +316,16 @@ function Remote({
         projectId: projectId ? (projectId as Id<"projects">) : undefined,
       });
     },
-    sendPrompt: async (chatId, text, ai) => {
+    cancelGeneration: async (promptId) => { await cancelGeneration({ promptId: promptId as Id<"workPrompts"> }); },
+    sendPrompt: async (chatId, text, ai, onPersisted) => sends.run(chatId, async () => {
       if (ai) {
         if (ai.model.provider === "chatgpt") throw new Error("ChatGPT subscription access is available in the local workspace.");
-        await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, provider: ai.model.provider, apiKey: ai.apiKey || "", googleSearch: ai.googleSearch, policyIds: ai.policyIds as Id<"policyRows">[] | undefined });
-      } else await send({ chatId: chatId as Id<"workChats">, text });
-    },
+        const request = { chatId: chatId as Id<"workChats">, text, model: ai.model.id, provider: ai.model.provider, apiKey: ai.apiKey || "", googleSearch: ai.googleSearch, policyIds: ai.policyIds as Id<"policyRows">[] | undefined };
+        const { promptId } = await prepare({ chatId: request.chatId, text, model: request.model, provider: request.provider, policyIds: request.policyIds });
+        onPersisted?.();
+        await generate({ ...request, promptId });
+      } else { await send({ chatId: chatId as Id<"workChats">, text }); onPersisted?.(); }
+    }),
     savePrompt: async (promptId) => {
       await savePrompt({ promptId: promptId as Id<"workPrompts"> });
     },

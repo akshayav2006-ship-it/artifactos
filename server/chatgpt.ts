@@ -140,11 +140,11 @@ export async function disconnect() {
   await save();
   return { message: revoked ? 'ChatGPT disconnected.' : 'Disconnected locally. Remote revocation was not confirmed; disconnect Artifactos in ChatGPT Settings.' };
 }
-export async function reply(model: string, input: ChatMessage[]) {
+export async function reply(model: string, input: ChatMessage[], signal?: AbortSignal) {
   const available = await models();
   if (!available.some((m: { id: string }) => m.id === model)) throw new Error('Choose an available ChatGPT model.');
   const account = await credentials();
-  const response = await fetch(`${resource}/responses`, { method: 'POST', headers: { Authorization: `Bearer ${account.access}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input, store: false, stream: true, ...(model === 'gpt-5.6-luna' ? { reasoning: { effort: 'none' } } : {}) }), signal: AbortSignal.timeout(120000) });
+  const response = await fetch(`${resource}/responses`, { method: 'POST', headers: { Authorization: `Bearer ${account.access}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model, input, store: false, stream: true, ...(model === 'gpt-5.6-luna' ? { reasoning: { effort: 'none' } } : {}) }), signal: signal ?? AbortSignal.timeout(120000) });
   if (!response.ok || !response.body) throw new Error(`ChatGPT request failed (${response.status}). Check your plan usage or reconnect.`);
   return readReplyStream(response.body);
 }

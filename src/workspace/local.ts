@@ -86,6 +86,8 @@ export function loadLocal(): Data {
   }
   return data;
 }
+const generations = new Map<string, AbortController>();
+
 export function localActions(
   get: () => Data,
   persist: (data: Data) => void,
@@ -174,7 +176,12 @@ export function localActions(
           });
       });
     },
+    async cancelGeneration(promptId) {
+      update(d => { const p = d.prompts.find(p => p.id === promptId); if (p?.status === "generating") p.status = "cancelled"; });
+      generations.get(promptId)?.abort();
+    },
     async sendPrompt(chatId, text, ai, onPersisted) {
+      if (get().prompts.some(p => p.chatId === chatId && p.status === "generating")) throw new Error("Wait for the current reply to finish.");
       const selected = [...new Set(ai?.policyIds || [])];
       if (selected.length > 8) throw new Error("Select up to 8 policy rows.");
       const projectId = get().chats.find(c => c.id === chatId)?.projectId;
@@ -204,16 +211,19 @@ export function localActions(
       });
       onPersisted?.();
       if (ai) {
+        const controller = new AbortController();
+        generations.set(promptId, controller);
         try {
           const history: ChatMessage[] = get().prompts.filter(p => p.chatId === chatId).slice(-30).flatMap(p => [
             { role: "user" as const, content: p.text },
             ...((p.reply || p.result) ? [{ role: "assistant" as const, content: p.reply || p.result }] : []),
           ]);
           if (policies.length) history[history.length - 1].content += policyContext(policies);
-          const response = await localAI<AIReply>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, googleSearch: ai.googleSearch, messages: history });
+          const response = await localAI<AIReply>("reply", { provider: ai.model.provider, model: ai.model.id, apiKey: ai.apiKey, googleSearch: ai.googleSearch, messages: history }, controller.signal);
           if (!response.text.trim()) throw new Error("AI returned an empty reply.");
           update(d => {
             const p = d.prompts.find(p => p.id === promptId)!;
+            if (p.status !== "generating") return;
             const policyCitations = citedPolicies(response.text, policies);
             const provenance = { provider: ai.model.provider, requestedModel: ai.model.id, resolvedModel: response.resolvedModel,
               ...(response.grounding ? { grounding: response.grounding } : {}),
@@ -228,8 +238,8 @@ export function localActions(
             p.replyProvenance = provenance; p.aiVersionId = versionId;
           });
         } catch (error) {
-          update(d => { const p = d.prompts.find(p => p.id === promptId)!; p.status = "failed"; p.error = error instanceof Error ? error.message : "AI request failed."; });
-        }
+          update(d => { const p = d.prompts.find(p => p.id === promptId)!; if (p.status !== "generating") return; p.status = "failed"; p.error = error instanceof Error ? error.message : "AI request failed."; });
+        } finally { generations.delete(promptId); }
       }
     },
     async savePrompt(promptId) {

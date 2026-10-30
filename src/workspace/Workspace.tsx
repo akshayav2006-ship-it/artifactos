@@ -1,6 +1,7 @@
 import { useChatDraft } from "./useChatDraft";
 import WorkspaceSearch from "./WorkspaceSearch";
 import { loadPreference, preferenceKey, savePreference } from "./preferences";
+import { needsMyReview } from "../../shared/workspace";
 import DocumentReply, { AttachmentCard } from "./DocumentReply";
 import { createPdfAttachment } from "./pdfDocument";
 import { isDocumentRequest } from "../../shared/documents";
@@ -20,6 +21,7 @@ import type {
   Project,
   Prompt,
   Route,
+  ResponseVersion,
 } from "../../shared/workspace";
 import { canReview } from "../../shared/workspace";
 
@@ -74,7 +76,9 @@ export default function Workspace({
   const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
   const [dismissedError, setDismissedError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string[]>([]);
+  const busy = pending.includes("workspace");
+  const operationLocks = useRef(new Set<string>());
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [pinsOpen, setPinsOpen] = useState(true);
@@ -97,9 +101,10 @@ export default function Workspace({
     setNotice("");
   };
   const newChat = (projectId?: string) => navigate({ page: "Chat", projectId });
-  const run = async (action: () => Promise<unknown>, message?: string) => {
-    if (busy) return false;
-    setBusy(true);
+  const run = async (action: () => Promise<unknown>, message?: string, operation = "workspace") => {
+    if (operationLocks.current.has(operation)) return false;
+    operationLocks.current.add(operation);
+    setPending([...operationLocks.current]);
     setNotice("");
     try {
       await action();
@@ -115,7 +120,8 @@ export default function Workspace({
       );
       return false;
     } finally {
-      setBusy(false);
+      operationLocks.current.delete(operation);
+      setPending([...operationLocks.current]);
     }
   };
   function pin(id: string, title: string, target: Route) {
@@ -347,7 +353,7 @@ export default function Workspace({
               </button>
             </div>
           )}
-          {(data.approvals || []).map((a) => (
+          {!!data.approvals?.length && <details className="review-inbox"><summary>Needs my review · {data.approvals.length}</summary>{data.approvals.map((a) => (
             <div className="invitation-banner" key={a.id}>
               <span>
                 <strong>{a.title}</strong> by {a.author} in {a.projectName}{" "}
@@ -367,6 +373,7 @@ export default function Workspace({
               </button>
             </div>
           ))}
+          </details>}
           {data.incoming.map((i) => (
             <div className="invitation-banner" key={i.id}>
               <span>
@@ -576,6 +583,7 @@ export default function Workspace({
                   busy={busy}
                 />
               }
+              pending={pending}
               key={JSON.stringify([local, userId, route.chatId || null, route.chatId ? null : route.projectId || null])}
               data={data}
               route={route}
@@ -806,6 +814,7 @@ export default function Workspace({
 export type Run = (
   action: () => Promise<unknown>,
   message?: string,
+  operation?: string,
 ) => Promise<boolean>;
 function Section({
   title,
@@ -1175,7 +1184,6 @@ function ArtifactList({
   project,
   userId,
   actions,
-  busy,
   run,
   local,
 }: {
@@ -1188,11 +1196,15 @@ function ArtifactList({
   run: Run;
   local: boolean;
 }) {
+  const [reviewPending, setReviewPending] = useState<string[]>([]);
+  const reviewLocks = useRef(new Set<string>());
   const [filter, setFilter] = useState("all");
   const rows = artifacts
     .filter(
       (a) =>
-        a.id === selectedArtifactId || filter === "all" || a.status === filter,
+        filter === "mine"
+          ? needsMyReview(a, project, userId)
+          : a.id === selectedArtifactId || filter === "all" || a.status === filter,
     )
     .sort((a, b) => b.createdAt - a.createdAt);
   return (
@@ -1209,6 +1221,7 @@ function ArtifactList({
           onChange={(e) => setFilter(e.target.value)}
         >
           <option value="all">All statuses</option>
+          <option value="mine">Needs my review</option>
           <option value="pending">Awaiting verification</option>
           <option value="verified">Verified</option>
           <option value="changes_requested">Changes requested</option>
@@ -1320,6 +1333,9 @@ function ArtifactList({
                   onSubmit={(e) => {
                     e.preventDefault();
                     const f = new FormData(e.currentTarget);
+                    if (reviewLocks.current.has(a.id)) return;
+                    reviewLocks.current.add(a.id);
+                    setReviewPending([...reviewLocks.current]);
                     void run(
                       () =>
                         actions.review(
@@ -1329,7 +1345,11 @@ function ArtifactList({
                           String(f.get("feedback")),
                         ),
                       "Review saved.",
-                    );
+                      `review:${a.id}`,
+                    ).finally(() => {
+                      reviewLocks.current.delete(a.id);
+                      setReviewPending([...reviewLocks.current]);
+                    });
                   }}
                 >
                   <h3>Verify this artifact</h3>
@@ -1365,7 +1385,7 @@ function ArtifactList({
                       placeholder="Explain the score and any changes needed."
                     />
                   </label>
-                  <button className="primary" disabled={busy}>
+                  <button className="primary" disabled={reviewPending.includes(a.id)}>
                     Submit review
                   </button>
                 </form>
@@ -1401,6 +1421,7 @@ function download(title: string, body: string) {
   URL.revokeObjectURL(url);
 }
 function ChatView({
+  pending,
   ai,
   aiControls,
   data,
@@ -1412,6 +1433,7 @@ function ChatView({
   navigate,
   local,
 }: {
+  pending: string[];
   ai?: AIRequest;
   aiControls: ReactNode;
   data: Data;
@@ -1450,9 +1472,10 @@ function ChatView({
   const canWrite =
     ownChat &&
     (!project || ["owner", "admin", "member"].includes(project.role));
+  const sending = pending.includes(`send:${chat?.id || "new"}`) || prompts.some(p => p.status === "generating");
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim() || busy) return;
+    if (!text.trim() || sending) return;
     const message = text.trim();
     await run(
       async () => {
@@ -1486,6 +1509,7 @@ function ChatView({
         : local
           ? "Prompt saved on this device."
           : "Prompt saved to the project history.",
+      `send:${chat?.id || "new"}`,
     );
   }
   return (
@@ -1526,6 +1550,7 @@ function ChatView({
                 ))}
             </select>
           </label>
+          {commits.length > 0 && <span className="muted">Project is fixed after the first commit to preserve snapshot provenance.</span>}
           {chat && (
             <button
               className="subtle"
@@ -1641,6 +1666,7 @@ function ChatView({
                 {data.responseVersions.some((v) => v.promptId === p.id) && (
                   <details className="response-history">
                     <summary>Response history</summary>
+                    <ResponseComparison versions={data.responseVersions.filter(v => v.promptId === p.id)} />
                     {data.responseVersions
                       .filter((v) => v.promptId === p.id)
                       .sort((a, b) => b.createdAt - a.createdAt)
@@ -1679,15 +1705,18 @@ function ChatView({
                       ))}
                   </details>
                 )}
+                {canWrite && p.status === "generating" && <button className="secondary" disabled={pending.includes(`cancel:${p.id}`)} onClick={() => void run(() => actions.cancelGeneration(p.id), "Generation cancelled.", `cancel:${p.id}`)}>Cancel generation</button>}
+                {p.status === "cancelled" && <p role="status">Generation cancelled. You can send another prompt.</p>}
                 {canWrite && p.status !== "generating" && (
                   <div className="message-actions">
                     <button
                       className="subtle"
-                      disabled={busy || p.saved !== false}
+                      disabled={pending.includes(`save:${p.id}`) || p.saved !== false}
                       onClick={() =>
                         void run(
                           () => actions.savePrompt(p.id),
                           "Prompt saved to your prompt library.",
+                          `save:${p.id}`,
                         )
                       }
                     >
@@ -1752,7 +1781,7 @@ function ChatView({
             />
             <div className="composer-bottom">
               <span>
-                {busy && ai
+                {sending && ai
                   ? "Generating…"
                   : ai?.model.name || "Prompt notebook"}{" "}
                 <small>
@@ -1771,7 +1800,7 @@ function ChatView({
               <button
                 className={ai ? "send-button" : "secondary"}
                 disabled={
-                  busy ||
+                  sending ||
                   !text.trim() ||
                   (ai?.model.provider === "gemini" && !ai.apiKey?.trim())
                 }
@@ -1825,19 +1854,21 @@ function ChatView({
                   run(
                     () => actions.selectFinal(c.id),
                     "Final version selected.",
+                    `commit:${c.id}`,
                   )
                 }
                 pushed={
                   !!c.pushed || data.artifacts.some((a) => a.commitId === c.id)
                 }
                 canWrite={canWrite}
-                busy={busy}
+                busy={pending.includes(`commit:${c.id}`)}
                 push={(approverIds) =>
                   run(
                     () => actions.push(c.id, approverIds),
                     local
                       ? "Final version submitted locally. Sign in to a shared project to request approval."
                       : "Final version submitted. All selected approvers must approve; email status is shown on the artifact.",
+                    `commit:${c.id}`,
                   )
                 }
               />
@@ -1862,7 +1893,7 @@ function ChatView({
                   String(f.get("result")),
                 );
                 setResultPrompt(null);
-              }, "Result attached. Existing commits are unchanged.");
+              }, "Result attached. Existing commits are unchanged.", `result:${resultPrompt.id}`);
             }}
           >
             <p className="muted">
@@ -1880,7 +1911,7 @@ function ChatView({
                 maxLength={12000}
               />
             </label>
-            <button className="primary" disabled={busy}>
+            <button className="primary" disabled={pending.includes(`result:${resultPrompt.id}`)}>
               Save result
             </button>
           </form>
@@ -1910,7 +1941,7 @@ function ChatView({
                 );
                 setCommitPrompt(null);
                 setShowCommits(true);
-              }, "Commit saved. Push it from the Commits panel when ready.");
+              }, "Commit saved. Push it from the Commits panel when ready.", `snapshot:${chat?.id}`);
             }}
           >
             <p className="muted">
@@ -1984,9 +2015,9 @@ function ChatView({
             </label>
             <button
               className="primary"
-              disabled={busy || !project || !commitBody.trim()}
+              disabled={pending.includes(`snapshot:${chat?.id}`) || !project || !commitBody.trim()}
             >
-              {busy ? "Creating commit…" : "Create commit"}
+              {pending.includes(`snapshot:${chat?.id}`) ? "Creating commit…" : "Create commit"}
             </button>
           </form>
         </Modal>
@@ -2085,6 +2116,8 @@ function CommitCard({
               )}
             </fieldset>
           )}
+          {!isFinal && <p className="muted">Select this commit as the final version before submitting.</p>}
+          {isFinal && !!approvers && !requiredIds.length && <p className="muted">Choose at least one required approver to submit.</p>}
           <button
             className="secondary"
             disabled={busy || !isFinal || (!!approvers && !requiredIds.length)}
@@ -2128,4 +2161,24 @@ function CopyText({ text, label }: { text: string; label: string }) {
     try { await navigator.clipboard.writeText(text); setStatus('Copied.'); }
     catch { setStatus('Could not copy. Select the response text and copy manually.'); }
   }}>{label}</button><span role="status">{status}</span></>;
+}
+
+function ResponseComparison({ versions }: { versions: ResponseVersion[] }) {
+  const [left, setLeft] = useState("");
+  const [right, setRight] = useState("");
+  if (versions.length < 2) return null;
+  const ordered = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+  const before = versions.find(v => v.id === left) || ordered[1];
+  const after = versions.find(v => v.id === right) || ordered[0];
+  return <section aria-label="Compare response versions">
+    <h4>Compare versions</h4>
+    <div className="response-comparison">
+      {[{ label: "Earlier version", version: before, change: setLeft }, { label: "Later version", version: after, change: setRight }].map(({ label, version, change }) =>
+        <div key={label}><label>{label}<select aria-label={label} value={version.id} onChange={e => change(e.target.value)}>
+          {ordered.map(v => <option key={v.id} value={v.id}>{v.source} · {date(v.createdAt)} · {v.id.slice(-7)}</option>)}
+        </select></label><p>{version.author}</p>{version.provenance && <ModelDetails model={version.provenance} />}
+        <GroundedText text={version.body} grounding={version.provenance?.grounding} /></div>)}
+    </div>
+    <p className="muted">{before.body === after.body ? "These versions have identical text." : `Text changed: ${before.body.length} → ${after.body.length} characters.`} Saved snapshots remain unchanged.</p>
+  </section>;
 }

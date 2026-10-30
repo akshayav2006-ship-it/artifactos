@@ -181,3 +181,36 @@ test('storage failure never acknowledges an unsaved prompt', async () => {
   expect(persisted).not.toHaveBeenCalled();
   expect(data.prompts).toHaveLength(0);
 });
+
+test("local cancellation aborts transport, blocks duplicate sends, and discards late results", async () => {
+  const { vi } = await import("vitest");
+  let data = structuredClone(emptyData);
+  const actions = localActions(() => data, next => { data = next; });
+  const chat = await actions.createChat("", "Cancel");
+  let resolve!: (response: Response) => void;
+  let signal: AbortSignal | undefined;
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+    signal = init?.signal as AbortSignal;
+    return new Promise<Response>(done => { resolve = done; });
+  });
+  try {
+    let persisted = false;
+    const pending = actions.sendPrompt(chat, "First", { model: { provider: "gemini", id: "gemini-test", name: "Test" }, apiKey: "key" }, () => {
+      expect(data.prompts[0].status).toBe("generating");
+      expect(fetch).not.toHaveBeenCalled();
+      persisted = true;
+    });
+    expect(persisted).toBe(true);
+    await expect(actions.sendPrompt(chat, "Duplicate")).rejects.toThrow("current reply");
+    expect(data.prompts).toHaveLength(1);
+    await actions.cancelGeneration(data.prompts[0].id);
+    expect(signal?.aborted).toBe(true);
+    resolve(new Response(JSON.stringify({ text: "Late response" }), { headers: { "Content-Type": "application/json" } }));
+    await pending;
+    expect(data.prompts[0].status).toBe("cancelled");
+    expect(data.prompts[0].reply).toBeUndefined();
+    expect(data.responseVersions).toHaveLength(0);
+    await actions.sendPrompt(chat, "Next notebook prompt");
+    expect(data.prompts).toHaveLength(2);
+  } finally { fetch.mockRestore(); }
+});

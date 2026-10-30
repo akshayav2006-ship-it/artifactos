@@ -251,3 +251,64 @@ test('AI replies commit directly with immutable PDF attachments and model proven
   expect(scope.commits.find(c => c.id === commitId)?.attachment).toEqual(attachment);
   await expect(user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Invalid', body: markdown, message: 'Invalid file', attachment: { ...attachment, data: 'not-pdf' } })).rejects.toThrow('PDF attachment');
 });
+
+test('cancellation is authorized, terminal, and rejects late success and failure', async () => {
+  const { user, chatId, t } = await setup();
+  const { promptId } = await user.mutation(internal.ai.begin, { chatId, text: 'Cancel me', model: 'gemini-test' });
+  const other = t.withIdentity({ subject: 'cancel-outsider' });
+  await other.mutation(api.users.syncCurrentUser, { name: 'Other', email: 'cancel@example.com' });
+  await expect(other.mutation(api.ai.cancel, { promptId })).rejects.toThrow();
+  await user.mutation(api.ai.cancel, { promptId });
+  await user.mutation(api.ai.cancel, { promptId });
+  expect(await user.query(internal.ai.generationStatus, { promptId })).toBe(false);
+  await user.mutation(internal.ai.finish, { promptId, requestedModel: 'gemini-test', result: 'Late answer' });
+  await user.mutation(internal.ai.finish, { promptId, requestedModel: 'gemini-test', result: '', error: 'Late failure' });
+  await user.mutation(internal.ai.expire, { promptId });
+  const scope = await user.query(api.workspace.scope, { chatId, limit: 10 });
+  expect(scope.prompts[0]).toMatchObject({ status: 'cancelled' });
+  expect(scope.prompts[0].reply).toBeUndefined();
+  expect((await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } })).page).toHaveLength(0);
+  await user.mutation(internal.ai.begin, { chatId, text: 'Next', model: 'gemini-test' });
+});
+
+test('running generation observes persisted cancellation and aborts the provider', async () => {
+  const { user, chatId } = await setup();
+  let started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  let signal: AbortSignal | undefined;
+  vi.spyOn(Agent.prototype, 'generateText').mockImplementation(((_ctx: unknown, _thread: unknown, options: { abortSignal: AbortSignal }) => {
+    signal = options.abortSignal;
+    started();
+    return new Promise((_resolve, reject) => {
+      signal!.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+    });
+  }) as never);
+  const running = user.action(api.ai.reply, { chatId, text: 'Running', model: 'gemini-test', apiKey: 'test' });
+  await ready;
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  await user.mutation(api.ai.cancel, { promptId: prompt.id });
+  await running;
+  expect(signal?.aborted).toBe(true);
+  expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0].status).toBe('cancelled');
+});
+
+test('prepared generations are claimed once before inference', async () => {
+  const { user, chatId } = await setup();
+  const request = { chatId, text: 'Prepared', model: 'gemini-test' };
+  const { promptId } = await user.mutation(api.ai.prepare, request);
+  await user.mutation(internal.ai.resume, { ...request, promptId });
+  await expect(user.mutation(internal.ai.resume, { ...request, promptId })).rejects.toThrow('no longer available');
+  await user.mutation(api.ai.cancel, { promptId });
+});
+
+test('manual attachments after cancellation cannot admit a late AI result', async () => {
+  const { user, chatId } = await setup();
+  const { promptId } = await user.mutation(internal.ai.begin, { chatId, text: 'Draft', model: 'gemini-test' });
+  await user.mutation(api.ai.cancel, { promptId });
+  await user.mutation(api.workspace.addResult, { promptId, result: 'Human replacement' });
+  await user.mutation(internal.ai.finish, { promptId, result: 'Late AI', requestedModel: 'gemini-test' });
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(prompt.result).toBe('Human replacement');
+  expect(prompt.reply).toBeUndefined();
+  expect((await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } })).page.map(v => v.body)).toEqual(['Human replacement']);
+});

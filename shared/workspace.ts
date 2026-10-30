@@ -40,7 +40,7 @@ export type Prompt = {
   text: string;
   result: string;
   createdAt: number;
-  status: "saved" | "generating" | "complete" | "failed";
+  status: "saved" | "generating" | "complete" | "failed" | "cancelled";
   error?: string;
   model?: string;
 };
@@ -151,6 +151,7 @@ export type Actions = {
   assignChat(chatId: string, projectId: string): Promise<void>;
   /** Invoke onPersisted after durable prompt creation, before provider generation. Never invoke for pre-persistence failures. */
   sendPrompt(chatId: string, text: string, ai?: AIRequest, onPersisted?: () => void): Promise<void>;
+  cancelGeneration(promptId: string): Promise<void>;
   savePrompt(promptId: string): Promise<void>;
   addResult(promptId: string, result: string): Promise<void>;
   commit(
@@ -182,4 +183,9 @@ export function canReview(
   userId: string,
 ) {
   return (role === "owner" || role === "admin" || role === "reviewer") && authorId !== userId;
+}
+
+export function needsMyReview(a: Artifact, project: Project, userId: string) {
+  return a.status === "pending" && canReview(project.role, a.authorId, userId) &&
+    (a.approvers?.length ? a.approvers.some(p => p.userId === userId && !p.decision) : a.requiredApprovals === undefined && project.role !== "reviewer");
 }

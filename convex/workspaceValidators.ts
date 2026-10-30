@@ -53,6 +53,8 @@ export const promptFields = {
   replyProvenance: v.optional(modelProvenance),
   provenance: v.optional(modelProvenance),
   currentVersionId: v.optional(v.id("workResponseVersions")),
+  generationCancelledAt: v.optional(v.number()),
+  generationStarted: v.optional(v.boolean()),
   aiVersionId: v.optional(v.id("workResponseVersions")),
   chatId: v.id("workChats"),
   projectId: v.optional(v.id("projects")),
@@ -64,6 +66,7 @@ export const promptFields = {
   status: v.union(
     v.literal("saved"),
     v.literal("generating"),
+    v.literal("cancelled"),
     v.literal("complete"),
     v.literal("failed"),
   ),

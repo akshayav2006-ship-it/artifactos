@@ -108,7 +108,7 @@ Every completed reply has **Commit artifact**. The dialog defaults to the chat's
 
 ## Account welcome page
 
-The login and shared-workspace welcome screens use a two-column introduction and embedded Clerk login form. **Create account** switches to Clerk registration. This replaces the legacy demo-credential login at `/login`; real account access leads to `/workspace`. Available email/password fields, social providers, verification, and recovery follow the configured Clerk instance.
+The login and shared-workspace welcome screens use a two-column introduction and embedded Clerk login form. **Create account** switches to Clerk registration. This replaces the legacy demo-credential login at `/login`; real account access leads to `/workspace`. Available email/password fields, social providers,verification, and recovery follow the configured Clerk instance.
 
 ## Everyday workspace controls
 

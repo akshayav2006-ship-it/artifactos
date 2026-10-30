@@ -132,3 +132,25 @@ test('local policy sheets search only their project and retain cited excerpts in
     expect(fetchMock).toHaveBeenCalledTimes(1);
   } finally { vi.unstubAllGlobals(); }
 });
+
+test('saving a local AI reply keeps its Markdown and original version instead of duplicating it', async () => {
+  const { vi } = await import('vitest');
+  let data = structuredClone(emptyData);
+  const actions = localActions(() => data, next => { data = next; });
+  const project = await actions.createProject('Reply', '');
+  const chat = await actions.createChat(project, 'Chat');
+  const markdown = '## **Original**\n\n- One\n- Two';
+  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ text: markdown }), { headers: { 'Content-Type': 'application/json' } }));
+  try {
+    await actions.sendPrompt(chat, 'Draft', { model: { id: 'test-model', name: 'Model', provider: 'chatgpt' } });
+    const prompt = data.prompts[0];
+    await actions.addResult(prompt.id, markdown);
+    await actions.addResult(prompt.id, markdown);
+    expect(data.prompts[0]).toMatchObject({ saved: true, result: markdown, currentVersionId: prompt.aiVersionId, provenance: { provider: 'chatgpt' } });
+    expect(data.responseVersions).toHaveLength(1);
+    await actions.commit(chat, prompt.id, 'Snapshot', markdown, 'Keep reply');
+    await actions.addResult(prompt.id, 'Manual edit');
+    expect(data.commits[0]).toMatchObject({ body: markdown, sourceVersionId: prompt.aiVersionId, sourceModel: { provider: 'chatgpt' } });
+    expect(data.prompts[0].provenance).toBeUndefined();
+  } finally { request.mockRestore(); }
+});

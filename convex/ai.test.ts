@@ -229,3 +229,23 @@ test('OpenRouter checks ownership before catalog or provider requests', async ()
   await expect(outsider.action(api.ai.reply, { chatId, text: 'Hello', model: 'test/model:free', provider: 'openrouter' })).rejects.toThrow('private');
   expect(fetch).not.toHaveBeenCalled();
 });
+
+test('saving the unchanged reply preserves Markdown and AI source through commit', async () => {
+  const { user, chatId } = await setup();
+  const projectId = await user.mutation(api.projects.create, { name: 'Reply save', description: '' });
+  await user.mutation(api.workspace.assignChat, { chatId, projectId });
+  const markdown = '### **Checklist**\n\n- Review evidence\n- Verify sources';
+  vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: markdown } as never);
+  await user.action(api.ai.reply, { chatId, text: 'Draft', model: 'gemini-2.5-flash', apiKey: 'test-key' });
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: markdown });
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: markdown });
+  const saved = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(saved).toMatchObject({ saved: true, result: markdown, currentVersionId: prompt.aiVersionId, provenance: { provider: 'gemini', requestedModel: 'gemini-2.5-flash' } });
+  expect((await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } })).page).toHaveLength(1);
+  await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Checklist', body: markdown, message: 'Save AI reply' });
+  await user.mutation(api.workspace.addResult, { promptId: prompt.id, result: 'Edited manually' });
+  const scope = await user.query(api.workspace.scope, { chatId, limit: 10 });
+  expect(scope.commits[0]).toMatchObject({ body: markdown, sourceVersionId: prompt.aiVersionId, sourceModel: { provider: 'gemini' } });
+  expect(scope.prompts[0].provenance).toBeUndefined();
+});

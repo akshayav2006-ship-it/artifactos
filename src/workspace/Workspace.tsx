@@ -1097,7 +1097,7 @@ function PromptList({
                   <h4>Prompt</h4>
                   <pre>{p.text}</pre>
                   <h4>Result</h4>
-                  <pre>{p.result || "No result attached yet."}</pre>
+                  <GroundedText text={p.result || "No result saved yet."} grounding={p.provenance?.grounding} />
                   {reviewed && (
                     <p className="muted">
                       Latest result review: {reviewed.reviewer} ·{" "}
@@ -1210,7 +1210,7 @@ function ArtifactList({
                   <small>{date(p.reviewedAt!)}</small>
                 </div>
               ))}
-              <pre className="artifact-body">{a.body}</pre>
+              <GroundedText text={a.body} grounding={a.sourceModel?.grounding} />
               <button
                 className="subtle"
                 onClick={() => download(a.title, a.body)}
@@ -1343,6 +1343,7 @@ function ChatView({
   const [policySelection, setPolicySelection] = useState<{ projectId: string; ids: string[] }>({ projectId: "", ids: [] });
   const [commitPrompt, setCommitPrompt] = useState<Prompt | null>(null);
   const [resultPrompt, setResultPrompt] = useState<Prompt | null>(null);
+  const [resultDraft, setResultDraft] = useState("");
   const [showCommits, setShowCommits] = useState(true);
   const prompts = data.prompts
     .filter((p) => p.chatId === route.chatId)
@@ -1436,7 +1437,7 @@ function ChatView({
               <div className="chat-mark">✳</div>
               <h1>What are we working on?</h1>
               <p>
-                Choose your model and chat. Save useful prompts, then attach results manually.
+                Choose your model and chat. Save a useful prompt with its reply, then commit it.
               </p>
               <div className="chat-suggestions">
                 <button onClick={() => setText("Help me explore ideas for ")}>
@@ -1484,7 +1485,7 @@ function ChatView({
                   </div>
                 ) : (
                   <div className="connection-note">
-                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "No result attached. Attach results manually when you want to keep them."}
+                    {p.status === "generating" ? "Generating a reply…" : p.status === "failed" ? p.error || "Reply failed. Try again." : "Save the prompt and reply when you want to keep this output."}
                   </div>
                 )}
                 {data.responseVersions.some(v => v.promptId === p.id) && (
@@ -1513,11 +1514,12 @@ function ChatView({
                       {p.saved !== false ? "✓ Prompt saved" : "Save prompt"}
                     </button>
                     {p.status === "failed" && <button className="secondary" disabled={busy} onClick={() => setText(p.text)}>Retry prompt</button>}
+                    {!p.result && p.reply && <button className="secondary" disabled={busy} onClick={() => void run(() => actions.addResult(p.id, p.reply!), "Prompt and reply saved. Ready to commit.")}>Save prompt &amp; reply</button>}
                     <button
                       className="subtle"
-                      onClick={() => setResultPrompt(p)}
+                      onClick={() => { setResultDraft(p.result || p.reply || ""); setResultPrompt(p); }}
                     >
-                      {p.result ? "Edit attached result" : "＋ Attach result"}
+                      {p.result ? "Edit saved result" : p.reply ? "Review/edit reply" : "＋ Attach result"}
                     </button>
                     <button
                       className="secondary"
@@ -1570,7 +1572,7 @@ function ChatView({
               {project
                 ? "Prompts are shared with this project’s collaborators."
                 : "This chat stays outside projects until you choose one."}{" "}
-              Save selected prompts. Results must be attached manually.{" "}
+              Save prompts with their replies, or edit a result before committing.{" "}
               ⌘/Ctrl + Enter to send.
             </p>
           </form>
@@ -1620,37 +1622,34 @@ function ChatView({
         </div>
       )}
       {resultPrompt && (
-        <Modal title="Attach a result" close={() => setResultPrompt(null)}>
+        <Modal title={resultPrompt.result ? "Edit saved result" : resultPrompt.reply ? "Save prompt and reply" : "Attach a result"} close={() => setResultPrompt(null)}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              const f = new FormData(e.currentTarget);
               void run(async () => {
-                await actions.addResult(
-                  resultPrompt.id,
-                  String(f.get("result")),
-                );
+                await actions.addResult(resultPrompt.id, resultDraft);
                 setResultPrompt(null);
               }, "Result attached. Existing commits are unchanged.");
             }}
           >
             <p className="muted">
-              Paste the result you want to keep with this prompt. This is
-              recorded as a contributor-attached result.
+              The AI reply is filled in automatically when available. Save it unchanged to keep its model attribution, or edit it to create your own revision. Markdown formatting is preserved; the preview shows how it will appear.
             </p>
             <label>
               Result
               <textarea
                 autoFocus
                 name="result"
-                defaultValue={resultPrompt.result}
+                value={resultDraft}
+                onChange={e => setResultDraft(e.target.value)}
                 required
                 rows={10}
                 maxLength={12000}
               />
             </label>
-            <button className="primary" disabled={busy}>
-              Save result
+            <details open className="result-preview"><summary>Formatted preview</summary><GroundedText text={resultDraft} grounding={resultDraft === resultPrompt.reply ? resultPrompt.replyProvenance?.grounding : undefined} /></details>
+            <button className="primary" disabled={busy || !resultDraft.trim()}>
+              Save prompt and result
             </button>
           </form>
         </Modal>

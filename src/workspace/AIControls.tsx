@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { geminiModels } from '../../shared/ai';
+import { geminiModels, groqModels } from '../../shared/ai';
 import type { AIModel, AIRequest } from '../../shared/ai';
 import { localAI } from './aiClient';
 
@@ -56,10 +56,11 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
     <div className="ai-picker-row">
       <label>Model
         <select aria-label="AI model" disabled={busy} value={value ? `${value.model.provider}:${value.model.id}` : ''} onChange={e => {
-          const model = models.find(m => `${m.provider}:${m.id}` === e.target.value);
+          const model = [...models, ...groqModels].find(m => `${m.provider}:${m.id}` === e.target.value);
           onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined, googleSearch: model.provider === 'gemini' ? value?.googleSearch : undefined } : undefined);
         }}>
           <option value="">Notebook · save only</option>
+          {!local && <optgroup label="Groq · hosted connection">{groqModels.map(m => <option key={m.id} value={`groq:${m.id}`}>{m.name}</option>)}</optgroup>}
           <optgroup label="Google Gemini · AI Studio key" disabled={hostedNotebook}>
             {models.filter(m => m.provider === 'gemini').map(m => <option key={m.id} value={`gemini:${m.id}`}>{m.name}</option>)}
           </optgroup>

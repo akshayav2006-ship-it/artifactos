@@ -31,3 +31,6 @@ skills-lock.json
 convex/_generated/ai/
 .vercel
 .env*
+
+# Local verification artifacts
+output/

@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from 'convex-test';
 import agent from '@convex-dev/agent/test';
+import { APICallError } from 'ai';
 import { Agent } from '@convex-dev/agent';
 import { afterEach, expect, test, vi } from 'vitest';
 import schema from './schema';
@@ -157,4 +158,36 @@ test('Google Search tools and source metadata survive response history', async (
   const history = await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } });
   expect(history.page.find(version => version.source === 'ai')?.provenance?.grounding).toEqual(prompt.replyProvenance?.grounding);
   expect(history.page[0].provenance).toBeUndefined();
+});
+
+test('Groq uses server credentials and preserves Groq provenance', async () => {
+  vi.stubEnv('GROQ_API_KEY', 'server-only-test-key');
+  try {
+    const { user, chatId, t } = await setup();
+    vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'Groq reply', response: { body: { model: 'openai/gpt-oss-20b' } } } as never);
+    await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'openai/gpt-oss-20b', provider: 'groq' });
+    const rows = await user.query(api.workspace.scope, { chatId, limit: 10 });
+    expect(rows.prompts[0]).toMatchObject({ status: 'complete', replyProvenance: { provider: 'groq', requestedModel: 'openai/gpt-oss-20b' } });
+    expect(JSON.stringify(await t.run(ctx => ctx.db.query('workPrompts').take(10)))).not.toContain('server-only-test-key');
+  } finally { vi.unstubAllEnvs(); }
+});
+
+test('Groq rejects unapproved models before generation', async () => {
+  const { user, chatId } = await setup();
+  const generate = vi.spyOn(Agent.prototype, 'generateText');
+  await expect(user.action(api.ai.reply, { chatId, text: 'Hello', model: 'unknown', provider: 'groq' })).rejects.toThrow();
+  expect(generate).not.toHaveBeenCalled();
+});
+
+
+test('Groq quota failures expose only the provider retry delay', async () => {
+  vi.stubEnv('GROQ_API_KEY', 'server-only-test-key');
+  try {
+    const { user, chatId } = await setup();
+    vi.spyOn(Agent.prototype, 'generateText').mockRejectedValue(new APICallError({ message: 'private provider detail', url: 'https://api.groq.com', requestBodyValues: {}, statusCode: 429, responseHeaders: { 'retry-after': '12' } }));
+    await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'openai/gpt-oss-20b', provider: 'groq' });
+    const rows = await user.query(api.workspace.scope, { chatId, limit: 10 });
+    expect(rows.prompts[0]).toMatchObject({ status: 'failed', error: 'Groq rate limit reached. Retry after 12 seconds.' });
+    expect(JSON.stringify(rows)).not.toContain('private provider detail');
+  } finally { vi.unstubAllEnvs(); }
 });

@@ -1,5 +1,5 @@
 import type { PolicyCitation } from "./policies.ts";
-export type AIModel = { id: string; name: string; provider: 'gemini' | 'chatgpt' };
+export type AIModel = { id: string; name: string; provider: 'gemini' | 'chatgpt' | 'groq' };
 export type AIRequest = { model: AIModel; apiKey?: string; googleSearch?: boolean; policyIds?: string[] };
 export const geminiModels: AIModel[] = [
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini' },
@@ -7,7 +7,7 @@ export const geminiModels: AIModel[] = [
 ];
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 export type ModelProvenance = {
-  provider: 'gemini' | 'chatgpt';
+  provider: 'gemini' | 'chatgpt' | 'groq';
   requestedModel: string;
   resolvedModel?: string;
   grounding?: GoogleGrounding;
@@ -77,3 +77,8 @@ export function googleGrounding(metadata: unknown): GoogleGrounding | undefined 
     ...(typeof entry === 'string' && entry ? { searchEntryPoint: entry } : {}),
   };
 }
+
+export const groqModels: AIModel[] = [
+  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B · Groq', provider: 'groq' },
+  { id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B · Groq', provider: 'groq' },
+];

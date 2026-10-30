@@ -315,8 +315,8 @@ function Remote({
     },
     sendPrompt: async (chatId, text, ai) => {
       if (ai) {
-        if (ai.model.provider !== "gemini") throw new Error("ChatGPT subscription access is available in the local workspace.");
-        await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, apiKey: ai.apiKey || "", googleSearch: ai.googleSearch, policyIds: ai.policyIds as Id<"policyRows">[] | undefined });
+        if (ai.model.provider === "chatgpt") throw new Error("ChatGPT subscription access is available in the local workspace.");
+        await generate({ chatId: chatId as Id<"workChats">, text, model: ai.model.id, provider: ai.model.provider, apiKey: ai.apiKey || "", googleSearch: ai.googleSearch, policyIds: ai.policyIds as Id<"policyRows">[] | undefined });
       } else await send({ chatId: chatId as Id<"workChats">, text });
     },
     savePrompt: async (promptId) => {

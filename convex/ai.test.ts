@@ -191,3 +191,41 @@ test('Groq quota failures expose only the provider retry delay', async () => {
     expect(JSON.stringify(rows)).not.toContain('private provider detail');
   } finally { vi.unstubAllEnvs(); }
 });
+
+const freeCatalog = { data: [{ id: 'test/model:free', name: 'Test free', architecture: { input_modalities: ['text'], output_modalities: ['text'] }, pricing: { prompt: '0', completion: '0' } }] };
+test('OpenRouter validates current free pricing and saves provider provenance without the server key', async () => {
+  vi.stubEnv('OPENROUTER_API_KEY', 'private-router-key');
+  try {
+    const { user, chatId, t } = await setup();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(freeCatalog)));
+    vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'OpenRouter reply', response: { body: { model: 'test/resolved' } } } as never);
+    await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'test/model:free', provider: 'openrouter' });
+    const rows = await user.query(api.workspace.scope, { chatId, limit: 10 });
+    expect(rows.prompts[0]).toMatchObject({ status: 'complete', replyProvenance: { provider: 'openrouter', requestedModel: 'test/model:free', resolvedModel: 'test/resolved' } });
+    expect(JSON.stringify(await t.run(ctx => ctx.db.query('workPrompts').take(10)))).not.toContain('private-router-key');
+  } finally { vi.unstubAllEnvs(); }
+});
+
+test('OpenRouter blocks paid or removed models and catalog outages before inference', async () => {
+  vi.stubEnv('OPENROUTER_API_KEY', 'private-router-key');
+  try {
+    const { user, chatId } = await setup();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [{ ...freeCatalog.data[0], pricing: { prompt: '0.1', completion: '0' } }] })));
+    const generate = vi.spyOn(Agent.prototype, 'generateText');
+    await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'test/model:free', provider: 'openrouter' });
+    expect(generate).not.toHaveBeenCalled();
+    expect((await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0].status).toBe('failed');
+    fetch.mockResolvedValue(new Response('unavailable', { status: 503 }));
+    await user.action(api.ai.reply, { chatId, text: 'Retry', model: 'test/model:free', provider: 'openrouter' });
+    expect(generate).not.toHaveBeenCalled();
+  } finally { vi.unstubAllEnvs(); }
+});
+
+test('OpenRouter checks ownership before catalog or provider requests', async () => {
+  const { t, chatId } = await setup();
+  const outsider = t.withIdentity({ subject: 'outsider' });
+  await outsider.mutation(api.users.syncCurrentUser, { name: 'Other', email: 'other@example.com' });
+  const fetch = vi.spyOn(globalThis, 'fetch');
+  await expect(outsider.action(api.ai.reply, { chatId, text: 'Hello', model: 'test/model:free', provider: 'openrouter' })).rejects.toThrow('private');
+  expect(fetch).not.toHaveBeenCalled();
+});

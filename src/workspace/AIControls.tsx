@@ -1,10 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { geminiModels, groqModels } from '../../shared/ai';
 import type { AIModel, AIRequest } from '../../shared/ai';
+import { fetchFreeOpenRouterModels } from '../../shared/openrouter';
+import { openRouterSnapshot, openRouterSnapshotDate } from '../../shared/openrouterSnapshot';
 import { localAI } from './aiClient';
 
 type Status = { accounts: { id: string; email: string; connected: boolean }[]; active?: string; signingIn: boolean; error: string };
 export default function AIControls({ local, value, onChange, busy, apiKey: key, setApiKey: setKey }: { local: boolean; value?: AIRequest; onChange: (value?: AIRequest) => void; busy: boolean; apiKey: string; setApiKey: (key: string) => void }) {
+  const [openRouterModels, setOpenRouterModels] = useState(openRouterSnapshot);
+  const [catalogStatus, setCatalogStatus] = useState(`Saved catalog · ${openRouterSnapshotDate}`);
+  const [catalogLoading, setCatalogLoading] = useState(!local);
+  const refreshCatalog = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const available = await fetchFreeOpenRouterModels(signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : undefined);
+      if (signal?.aborted) return;
+      setOpenRouterModels(available);
+      setCatalogStatus(`Live OpenRouter catalog · ${available.length} free chat entries · ${new Date().toLocaleDateString()}`);
+    } catch {
+      if (!signal?.aborted) setCatalogStatus('Catalog refresh failed. Showing the last available list; availability is checked again when sending.');
+    } finally { if (!signal?.aborted) setCatalogLoading(false); }
+  }, []);
+  useEffect(() => {
+    if (local) return;
+    const controller = new AbortController();
+    void fetchFreeOpenRouterModels(AbortSignal.any([controller.signal, AbortSignal.timeout(15000)])).then(available => {
+      if (controller.signal.aborted) return;
+      setOpenRouterModels(available);
+      setCatalogStatus(`Live OpenRouter catalog · ${available.length} free chat entries · ${new Date().toLocaleDateString()}`);
+    }).catch(() => {
+      if (!controller.signal.aborted) setCatalogStatus('Catalog refresh failed. Showing the saved list; availability is checked again when sending.');
+    }).finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
+    return () => controller.abort();
+  }, [local]);
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<AIModel[]>(value && !geminiModels.some(m => m.id === value.model.id) ? [...geminiModels, value.model] : geminiModels);
   const [status, setStatus] = useState<Status>();
@@ -56,12 +83,15 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
     <div className="ai-picker-row">
       <label>Model
         <select aria-label="AI model" disabled={busy} value={value ? `${value.model.provider}:${value.model.id}` : ''} onChange={e => {
-          const model = [...models, ...groqModels].find(m => `${m.provider}:${m.id}` === e.target.value);
+          const model = [...models, ...groqModels, ...openRouterModels].find(m => `${m.provider}:${m.id}` === e.target.value);
           onChange(model ? { model, apiKey: model.provider === 'gemini' ? key : undefined, googleSearch: model.provider === 'gemini' ? value?.googleSearch : undefined } : undefined);
         }}>
           <option value="">Notebook · save only</option>
-          {!local && <optgroup label="Groq · hosted connection">{groqModels.map(m => <option key={m.id} value={`groq:${m.id}`}>{m.name}</option>)}</optgroup>}
-          <optgroup label="Google Gemini · AI Studio key" disabled={hostedNotebook}>
+          {!local && <optgroup label="Groq · free-tier chat">{groqModels.map(m => <option key={m.id} value={`groq:${m.id}`}>{m.name}</option>)}</optgroup>}
+          {!local && <optgroup label="OpenRouter · free chat models">{openRouterModels.map(m => <option key={m.id} value={`openrouter:${m.id}`}>{m.name}</option>)}
+            {value?.model.provider === 'openrouter' && !openRouterModels.some(m => m.id === value.model.id) && <option value={`openrouter:${value.model.id}`} disabled>{value.model.name} · unavailable</option>}
+          </optgroup>}
+          <optgroup label="Gemini · free-tier eligible · your key" disabled={hostedNotebook}>
             {models.filter(m => m.provider === 'gemini').map(m => <option key={m.id} value={`gemini:${m.id}`}>{m.name}</option>)}
           </optgroup>
           {models.some(m => m.provider === 'chatgpt') && <optgroup label="ChatGPT · your plan">
@@ -77,7 +107,14 @@ export default function AIControls({ local, value, onChange, busy, apiKey: key, 
       Ground with Google Search
       <small>Searches when useful and includes sources. Search usage may incur charges.</small>
     </label>}
+    {!local && <small className="connection-note">{catalogStatus}. Free models have provider quotas and may be unavailable.</small>}
     {open && <div className="ai-connections">
+      {!local && <div>
+        <strong>OpenRouter · free models</strong>
+        <p>Uses the hosted server key. The list includes every currently zero-priced text chat model in the public catalog, plus the free router. Audio and safety classifiers are excluded.</p>
+        <button type="button" className="secondary" disabled={busy || catalogLoading} onClick={() => { setCatalogLoading(true); void refreshCatalog(); }}>{catalogLoading ? 'Refreshing…' : 'Refresh free models'}</button>
+        <p><a href="https://openrouter.ai/models?max_price=0" target="_blank" rel="noreferrer">OpenRouter catalog ↗</a> · Free availability depends on provider capacity and your account settings.</p>
+      </div>}
       <div>
         <strong>Gemini · test with a free-tier key</strong>
         <p>Create a key in <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio ↗</a>. Free-tier availability and limits depend on the model, region, and project billing.</p>

@@ -1556,7 +1556,7 @@ function ChatView({
             />
             <div className="composer-bottom">
               <span>
-                {busy && ai ? "Generating…" : ai?.model.name || "Prompt notebook"} <small>· {ai ? ai.model.provider === "chatgpt" ? "ChatGPT plan" : ai.model.provider === "groq" ? "Groq" : "AI Studio key" : "save only"}</small>
+                {busy && ai ? "Generating…" : ai?.model.name || "Prompt notebook"} <small>· {ai ? ai.model.provider === "chatgpt" ? "ChatGPT plan" : ai.model.provider === "groq" ? "Groq" : ai.model.provider === "openrouter" ? "OpenRouter" : "AI Studio key" : "save only"}</small>
               </span>
               <button
                 className={ai ? "send-button" : "secondary"}
@@ -1786,7 +1786,7 @@ function CommitCard({
 
 function ModelDetails({ model }: { model: ModelProvenance }) {
   return <div className="model-provenance">
-    <span>{model.provider === "gemini" ? "Gemini" : model.provider === "groq" ? "Groq" : "ChatGPT"} · Requested: {model.requestedModel}</span>
+    <span>{model.provider === "gemini" ? "Gemini" : model.provider === "groq" ? "Groq" : model.provider === "openrouter" ? "OpenRouter" : "ChatGPT"} · Requested: {model.requestedModel}</span>
     <span>Reported model/version: {model.resolvedModel || "Not provided"}</span>
     <GoogleSources grounding={model.grounding} />
     <PolicySources citations={model.policyCitations} />

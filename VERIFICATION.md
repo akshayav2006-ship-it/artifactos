@@ -34,3 +34,11 @@ The implemented core passes automated checks. The entire application is not yet 
 Frontend: https://artifactos-rho.vercel.app
 
 Backend used by the frontend: dazzling-bobcat-372 (development).
+
+
+## OpenRouter addition — 30 October 2026
+
+- Full suite: 66 tests passed. Added free-catalog filtering, zero-price transport enforcement, OpenRouter provenance/credential isolation, paid/removed model rejection, catalog outage, and chat ownership tests.
+- Live SDK request using the configured server key and enforced zero maximum provider pricing succeeded through `openrouter/free`; provider reported `nvidia/nemotron-3.5-lightning:free` with a nonempty response.
+- Catalog snapshot: 16 free chat entries. The picker refreshes from the API and groups Groq, OpenRouter, and Gemini; backend revalidates current free eligibility on every OpenRouter generation.
+- Full browser workflow for OpenRouter and inference on every catalog model were not exercised. The earlier shared Groq browser workflow passed.

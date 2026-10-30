@@ -1,5 +1,7 @@
 import { policyContext, citedPolicies } from '../shared/policies';
 import { v, ConvexError } from 'convex/values';
+import { createOpenAI } from '@ai-sdk/openai';
+import { fetchFreeOpenRouterModels, freeOpenRouterFetch } from '../shared/openrouter';
 import { createGroq } from '@ai-sdk/groq';
 import { APICallError } from 'ai';
 import { groqModels } from '../shared/ai';
@@ -12,7 +14,7 @@ import { googleGroundingValidator, policyCitationValidator } from './workspaceVa
 import { googleGrounding, reportedModel } from '../shared/ai';
 
 export const begin = internalMutation({
-  args: { chatId: v.id('workChats'), text: v.string(), model: v.string(), provider: v.optional(v.union(v.literal('gemini'), v.literal('groq'))), policyIds: v.optional(v.array(v.id('policyRows'))) },
+  args: { chatId: v.id('workChats'), text: v.string(), model: v.string(), provider: v.optional(v.union(v.literal('gemini'), v.literal('groq'), v.literal('openrouter'))), policyIds: v.optional(v.array(v.id('policyRows'))) },
   returns: v.object({ promptId: v.id('workPrompts'), threadId: v.string(), policies: v.array(v.object({ id: v.string(), projectId: v.string(), sheet: v.string(), row: v.number(), text: v.string() })) }),
   handler: async (ctx, args) => {
     const { chat, user } = await chatAccess(ctx, args.chatId, true);
@@ -64,26 +66,34 @@ export const finish = internalMutation({
   },
 });
 export const reply = action({
-  args: { chatId: v.id('workChats'), text: v.string(), model: v.string(), apiKey: v.optional(v.string()), provider: v.optional(v.union(v.literal('gemini'), v.literal('groq'))), googleSearch: v.optional(v.boolean()), policyIds: v.optional(v.array(v.id('policyRows'))) },
+  args: { chatId: v.id('workChats'), text: v.string(), model: v.string(), apiKey: v.optional(v.string()), provider: v.optional(v.union(v.literal('gemini'), v.literal('groq'), v.literal('openrouter'))), googleSearch: v.optional(v.boolean()), policyIds: v.optional(v.array(v.id('policyRows'))) },
   returns: v.null(),
   handler: async (ctx, args) => {
     if (!args.text.trim() || args.text.length > 12000) throw new ConvexError('Enter a prompt of 1–12000 characters.');
     const isGroq = args.provider === 'groq';
-    if (!isGroq && (!args.apiKey?.trim() || args.apiKey.length > 500)) throw new ConvexError('Enter a Gemini API key from Google AI Studio.');
-    if (isGroq ? !groqModels.some(m => m.id === args.model) : !/^gemini-[a-z0-9.-]+$/.test(args.model)) throw new ConvexError(isGroq ? 'Choose a supported Groq model.' : 'Choose a Gemini model.');
+    const isOpenRouter = args.provider === 'openrouter';
+    const isGemini = !isGroq && !isOpenRouter;
+    if (isGemini && (!args.apiKey?.trim() || args.apiKey.length > 500)) throw new ConvexError('Enter a Gemini API key from Google AI Studio.');
+    if (!isOpenRouter && (isGroq ? !groqModels.some(m => m.id === args.model) : !/^gemini-[a-z0-9.-]+$/.test(args.model))) throw new ConvexError(isGroq ? 'Choose a supported Groq model.' : 'Choose a Gemini model.');
     const { promptId, threadId, policies } = await ctx.runMutation(internal.ai.begin, { chatId: args.chatId, text: args.text.trim(), model: args.model, provider: args.provider, policyIds: args.policyIds });
     try {
       if (isGroq && !env.GROQ_API_KEY) throw new Error('Groq is not configured.');
+      if (isOpenRouter) {
+        if (!env.OPENROUTER_API_KEY) throw new Error('OpenRouter is not configured.');
+        const available = await fetchFreeOpenRouterModels();
+        if (!available.some(model => model.id === args.model)) throw new Error('Choose a currently free OpenRouter chat model.');
+      }
       const google = createGoogleGenerativeAI({ apiKey: args.apiKey });
-      const agent = new Agent(components.agent, { name: 'Artifactos', languageModel: isGroq ? createGroq({ apiKey: env.GROQ_API_KEY })(args.model) : google(args.model), tools: !isGroq && args.googleSearch ? { google_search: google.tools.googleSearch({}) } : undefined, instructions: 'Help the user create useful, accurate work and artifacts.' });
-      const response = await agent.generateText(ctx, { threadId }, { prompt: args.text.trim() + policyContext(policies), maxRetries: 0, maxOutputTokens: isGroq ? 2048 : undefined, abortSignal: AbortSignal.timeout(120000) });
+      const agent = new Agent(components.agent, { name: 'Artifactos', languageModel: isOpenRouter ? createOpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: env.OPENROUTER_API_KEY, fetch: freeOpenRouterFetch }).chat(args.model) : isGroq ? createGroq({ apiKey: env.GROQ_API_KEY })(args.model) : google(args.model), tools: isGemini && args.googleSearch ? { google_search: google.tools.googleSearch({}) } : undefined, instructions: 'Help the user create useful, accurate work and artifacts.' });
+      const response = await agent.generateText(ctx, { threadId }, { prompt: args.text.trim() + policyContext(policies), maxRetries: 0, maxOutputTokens: !isGemini ? 2048 : undefined, abortSignal: AbortSignal.timeout(120000) });
       if (!response.text.trim()) throw new Error('Empty reply');
       await ctx.runMutation(internal.ai.finish, { promptId, requestedModel: args.model, result: response.text, resolvedModel: reportedModel(response.response, args.model), grounding: googleGrounding(response.providerMetadata), policyCitations: citedPolicies(response.text, policies) });
     } catch (error) {
       const retry = APICallError.isInstance(error) && error.statusCode === 429;
       const seconds = retry ? Number(error.responseHeaders?.['retry-after']) : NaN;
-      const groqError = retry ? `Groq rate limit reached. ${Number.isFinite(seconds) && seconds > 0 ? `Retry after ${Math.ceil(seconds)} seconds.` : 'Wait for your organization quota to reset, then retry.'}` : 'Groq could not reply. Check the server key, model access, and quota, then retry.';
-      await ctx.runMutation(internal.ai.finish, { promptId, requestedModel: args.model, result: '', error: isGroq ? groqError : 'Gemini could not reply. Check your AI Studio key, model access, and quota, then retry.' });
+      const providerName = isOpenRouter ? 'OpenRouter' : 'Groq';
+      const groqError = retry ? `${providerName} rate limit reached. ${Number.isFinite(seconds) && seconds > 0 ? `Retry after ${Math.ceil(seconds)} seconds.` : 'Wait for your organization quota to reset, then retry.'}` : `${providerName} could not reply. Check the server key, free model availability, account privacy settings, and quota, then retry.`;
+      await ctx.runMutation(internal.ai.finish, { promptId, requestedModel: args.model, result: '', error: !isGemini ? groqError : 'Gemini could not reply. Check your AI Studio key, model access, and quota, then retry.' });
     }
     return null;
   },

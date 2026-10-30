@@ -87,3 +87,14 @@ AI replies can cite selected excerpts using `[P1]` markers. Expand **Company pol
 ## Hosted Groq chat
 
 Signed-in shared workspaces can select GPT OSS 120B, GPT OSS 20B, or Qwen 3.8 27B (preview) through Groq. Speech and safety-classification models use different workflows and are excluded from the chat picker. Configure `GROQ_API_KEY` in the Convex deployment used by `VITE_CONVEX_URL`, then deploy the backend and Vercel frontend. The key stays server-side. Groq replies use the existing conversation, policy citations, and response provenance flow. Generation disables automatic retries, caps output at 2,048 tokens, and displays a retry delay when a 429 response supplies `retry-after`. Organization quotas are shared across users; exact quotas depend on the Groq account.
+
+
+## OpenRouter free chat catalog
+
+Signed-in workspaces group chat choices under Groq, OpenRouter, and Gemini. Configure `OPENROUTER_API_KEY` on the Convex deployment; it never goes into browser storage, source, or prompt records. OpenRouter's public models API refreshes the picker when the shared workspace opens; **AI connections → Refresh free models** refreshes it again. The dated bundled snapshot is used when catalog refresh fails, with a visible notice. The server fetches current pricing again before every OpenRouter generation and fails closed if the catalog is unavailable or the model is no longer free.
+
+Eligible entries accept text, produce only text, and have explicit zero input/output prices and no nonzero listed price fields. Dedicated safety classifiers and audio generation are excluded. Requests set zero maximum prompt/completion/request prices and disable provider fallback. There is no automatic paid-model fallback. Free-model quotas, provider capacity, and account privacy settings still apply. Replies retain OpenRouter attribution in response history and use the existing project access and policy citation flow.
+
+Catalog checked 2026-10-30: 16 free OpenRouter chat entries (including the free router), three Groq chat choices, and eight Gemini free-tier-eligible presets. The Gemini list follows Google's published pricing; API key access and quotas depend on the Google account, and using a billed key or optional Google Search may incur charges. Custom Gemini IDs remain available.
+
+Sources: [OpenRouter models API](https://openrouter.ai/api/v1/models), [free model variants](https://openrouter.ai/docs/guides/routing/model-variants/free), [provider pricing filters](https://openrouter.ai/docs/guides/routing/provider-selection), [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), and [Groq models](https://console.groq.com/docs/models).

@@ -7,7 +7,7 @@ export const googleGroundingValidator = v.object({
 });
 export const policyCitationValidator = v.object({ marker: v.string(), policyId: v.string(), sheet: v.string(), row: v.number(), text: v.string() });
 export const modelProvenance = v.object({
-  provider: v.union(v.literal("gemini"), v.literal("chatgpt"), v.literal("groq")),
+  provider: v.union(v.literal("gemini"), v.literal("chatgpt"), v.literal("groq"), v.literal("openrouter")),
   requestedModel: v.string(),
   resolvedModel: v.optional(v.string()),
   grounding: v.optional(googleGroundingValidator),

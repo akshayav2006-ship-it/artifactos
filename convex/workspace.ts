@@ -238,14 +238,6 @@ export const addResult = mutation({
     if (prompt.status === "generating") throw new Error("Wait for the current reply to finish.");
     const result = text(args.result);
     await preserveResult(ctx, prompt);
-    if (prompt.reply?.trim() === result && prompt.aiVersionId) {
-      await ctx.db.patch(prompt._id, {
-        result: prompt.reply, saved: true, status: "complete",
-        currentVersionId: prompt.aiVersionId, provenance: prompt.replyProvenance,
-        model: prompt.replyProvenance?.requestedModel, error: undefined,
-      });
-      return null;
-    }
     await saveMessage(ctx, components.agent, {
       threadId: chat.agentThreadId,
       message: {

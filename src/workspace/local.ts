@@ -244,16 +244,6 @@ export function localActions(
         if (p.status === "generating") throw new Error("Wait for the current reply to finish.");
         if (!result.trim()) throw new Error("Enter a result.");
         preserveResult(d, p);
-        if (p.reply?.trim() === result.trim() && p.aiVersionId) {
-          p.result = p.reply;
-          p.currentVersionId = p.aiVersionId;
-          p.provenance = p.replyProvenance;
-          p.model = p.replyProvenance?.requestedModel;
-          p.saved = true;
-          p.status = "complete";
-          delete p.error;
-          return;
-        }
         p.currentVersionId = id();
         d.responseVersions.unshift({ id: p.currentVersionId, chatId: p.chatId, promptId,
           authorId: "local", author: "You", body: result, source: "manual", createdAt: Date.now(),

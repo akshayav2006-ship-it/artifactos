@@ -1253,6 +1253,3 @@
 .ai-workspace .markdown-body td { padding: 9px 12px; border: 1px solid #555; text-align: left; }
 .ai-workspace .markdown-body th { background: #292929; font-weight: 600; }
 .ai-workspace .markdown-body hr { border: 0; border-top: 1px solid #555; margin: 1.4em 0; }
-.ai-workspace .result-preview { margin: 0 0 18px; padding: 12px; border: 1px solid #555; border-radius: 8px; }
-.ai-workspace .result-preview summary { cursor: pointer; margin-bottom: 12px; font-size: 13px; }
-.ai-workspace .result-preview .markdown-body { max-height: 280px; overflow-y: auto; }

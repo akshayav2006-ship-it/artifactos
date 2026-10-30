@@ -150,3 +150,34 @@ test('local replies commit without manual result attachment and retain PDF bytes
     expect(JSON.parse(JSON.stringify(data)).commits[0].attachment).toEqual(attachment);
   } finally { request.mockRestore(); }
 });
+
+test('send lifecycle acknowledges durable prompt creation before a provider failure', async () => {
+  const { vi } = await import('vitest');
+  let data = structuredClone(emptyData);
+  const a = localActions(() => data, next => { data = next; });
+  const chat = await a.createChat('', 'Recovery');
+  const persisted = vi.fn(() => {
+    expect(data.prompts[0]).toMatchObject({ text: 'Preserve this', status: 'generating' });
+  });
+  const request = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    expect(persisted).toHaveBeenCalledTimes(1);
+    throw new Error('Connection lost');
+  });
+  try {
+    await a.sendPrompt(chat, 'Preserve this', { model: { id: 'gemini-2.5-flash', name: 'Gemini', provider: 'gemini' } }, persisted);
+    expect(data.prompts[0].status).toBe('failed');
+    expect(persisted).toHaveBeenCalledTimes(1);
+  } finally { request.mockRestore(); }
+});
+
+test('storage failure never acknowledges an unsaved prompt', async () => {
+  const { vi } = await import('vitest');
+  let data = structuredClone(emptyData);
+  const a = localActions(() => data, next => { data = next; });
+  const chat = await a.createChat('', 'Recovery');
+  const failing = localActions(() => data, () => { throw new Error('Storage full'); });
+  const persisted = vi.fn();
+  await expect(failing.sendPrompt(chat, 'Keep draft', undefined, persisted)).rejects.toThrow('Storage full');
+  expect(persisted).not.toHaveBeenCalled();
+  expect(data.prompts).toHaveLength(0);
+});

@@ -389,7 +389,7 @@ function Remote({
       account={account}
       userId={userId}
       local={false}
-      loading={!projects || !chats}
+      loading={!projects || !chats || promptPages.status === "LoadingFirstPage"}
       more={more}
       loadMore={loadMore}
     />
@@ -404,9 +404,9 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
     return this.state.failed ? (
       <div className="session-message">
         <h2>Connection unavailable</h2>
-        <p>Your local work is still saved on this device.</p>
+        <p>Saved data and drafts can be recovered when browser storage is available. Reload to retry the connection.</p>
         <button onClick={() => window.location.reload()}>
-          Return to workspace
+          Retry connection
         </button>
       </div>
     ) : (

@@ -1,3 +1,4 @@
+import { AvailabilityPage, SearchPage, NotificationsPage } from '../app-shell/WorkspacePages'
 import type { ReactNode } from 'react'
 import App from '../../App'
 import { Navigate } from 'react-router-dom'
@@ -48,23 +49,23 @@ export const routeConfig: RouteConfigEntry[] = [
   },
   {
     path: '/search',
-    element: withShell(<Navigate to="/dashboard" replace />),
+    element: withShell(<SearchPage />),
   },
   {
     path: '/assistant',
-    element: withShell(<Navigate to="/dashboard" replace />),
+    element: withShell(<AvailabilityPage title="AI Assistant" />),
   },
   {
     path: '/analytics',
-    element: withShell(<Navigate to="/dashboard" replace />),
+    element: withShell(<AvailabilityPage title="Analytics" />),
   },
   {
     path: '/knowledge-graph',
-    element: withShell(<Navigate to="/dashboard" replace />),
+    element: withShell(<AvailabilityPage title="Knowledge Graph" />),
   },
   {
     path: '/notifications',
-    element: withShell(<WorkspaceCommandCenter initialTab="notifications" />),
+    element: withShell(<NotificationsPage />),
   },
   {
     path: '/settings',
@@ -74,5 +75,5 @@ export const routeConfig: RouteConfigEntry[] = [
     path: '/profile',
     element: withShell(<ProfilePage />),
   },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
+  { path: '*', element: withShell(<AvailabilityPage title="Page unavailable" />) },
 ]

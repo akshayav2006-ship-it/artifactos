@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { useAppState } from '../state/useAppState'
+import { useState } from 'react'
+import { useWorkspaceSnapshot } from './useWorkspaceSnapshot'
 import { navItems } from '../routes/navigation'
 import './AppShell.css'
 
@@ -10,7 +11,10 @@ type AppShellProps = {
 
 export function AppShell({ children }: AppShellProps) {
   const { user, logout } = useAuth()
-  const { notifications } = useAppState()
+  const navigate = useNavigate()
+  const [query, setQuery] = useState('')
+  const { data } = useWorkspaceSnapshot()
+  const notifications = (data?.incoming.length || 0) + (data?.artifacts.filter(a => a.status === 'pending').length || 0)
 
   return (
     <div className="app-shell">
@@ -45,12 +49,12 @@ export function AppShell({ children }: AppShellProps) {
 
       <div className="main-panel">
         <header className="topbar">
-          <div className="search-box">
+          <form className="search-box" role="search" onSubmit={event => { event.preventDefault(); if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`) }}>
             <span>Search</span>
-            <input type="text" placeholder="Search artifacts, projects, prompts..." />
-          </div>
+            <input aria-label="Search workspace" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search saved workspace data..." /><button type="submit">Search</button>
+          </form>
           <div className="topbar-actions">
-            <button type="button" className="icon-button">
+            <button type="button" className="icon-button" aria-label={`Notifications: ${notifications} saved updates`} onClick={() => navigate('/notifications')}>
               🔔
               <span className="notification-count">{notifications}</span>
             </button>

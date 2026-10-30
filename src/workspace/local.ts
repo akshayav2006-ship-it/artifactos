@@ -174,7 +174,7 @@ export function localActions(
           });
       });
     },
-    async sendPrompt(chatId, text, ai) {
+    async sendPrompt(chatId, text, ai, onPersisted) {
       const selected = [...new Set(ai?.policyIds || [])];
       if (selected.length > 8) throw new Error("Select up to 8 policy rows.");
       const projectId = get().chats.find(c => c.id === chatId)?.projectId;
@@ -202,6 +202,7 @@ export function localActions(
           createdAt: Date.now(),
         });
       });
+      onPersisted?.();
       if (ai) {
         try {
           const history: ChatMessage[] = get().prompts.filter(p => p.chatId === chatId).slice(-30).flatMap(p => [

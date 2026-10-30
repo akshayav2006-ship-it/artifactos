@@ -1,3 +1,4 @@
+import { useChatDraft } from "./useChatDraft";
 import DocumentReply, { AttachmentCard } from "./DocumentReply";
 import { createPdfAttachment } from "./pdfDocument";
 import { isDocumentRequest } from "../../shared/documents";
@@ -95,6 +96,7 @@ export default function Workspace({
   }
   const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
+  const [dismissedError, setDismissedError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
@@ -358,10 +360,12 @@ export default function Workspace({
         <div
           className={`content ${route.page === "Chat" ? "chat-content" : ""}`}
         >
-          {(notice || error) && (
+          {(notice || (error && error !== dismissedError)) && (
             <div role="status" className="notice">
               <span>{notice || error}</span>
-              <button aria-label="Dismiss" onClick={() => setNotice("")}>
+              <button onClick={() => window.location.reload()}>Reload workspace</button>
+              {local && <button onClick={() => download("Workspace backup", JSON.stringify(data, null, 2))}>Download current data</button>}
+              <button aria-label="Dismiss" onClick={() => { if (notice) setNotice(""); else setDismissedError(error); }}>
                 ×
               </button>
             </div>
@@ -592,7 +596,7 @@ export default function Workspace({
                   busy={busy}
                 />
               }
-              key={route.chatId || `new-${route.projectId || "personal"}`}
+              key={JSON.stringify([local, userId, route.chatId || null, route.chatId ? null : route.projectId || null])}
               data={data}
               route={route}
               actions={actions}
@@ -1441,7 +1445,8 @@ function ChatView({
 }) {
   const chat = data.chats.find((c) => c.id === route.chatId);
   const [projectId, setProjectId] = useState(route.projectId || "");
-  const [text, setText] = useState("");
+  const draft = useChatDraft(local, userId, route.chatId, route.projectId, data.prompts);
+  const { text, setText } = draft;
   const [policySelection, setPolicySelection] = useState<{
     projectId: string;
     ids: string[];
@@ -1471,7 +1476,7 @@ function ChatView({
         let id = chat?.id;
         if (!id)
           id = await actions.createChat(projectId, message.slice(0, 100));
-        setText("");
+        const onPersisted = draft.begin(id, message);
         navigate({
           page: "Chat",
           chatId: id,
@@ -1489,7 +1494,9 @@ function ChatView({
                     : [],
               }
             : undefined,
+          onPersisted,
         );
+        onPersisted();
       },
       ai
         ? undefined
@@ -1735,6 +1742,7 @@ function ChatView({
         </div>
         {canWrite ? (
           <form className="composer" onSubmit={send}>
+            {draft.error && <div role="alert">{draft.error} <button type="button" onClick={draft.retry}>Retry saving draft</button> <button type="button" onClick={() => download("Recovered draft", text)}>Download draft</button></div>}
             <textarea
               aria-label="Message"
               placeholder={

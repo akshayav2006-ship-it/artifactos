@@ -146,7 +146,8 @@ export type Actions = {
   createProject(name: string, description: string): Promise<string>;
   createChat(projectId: string, title: string): Promise<string>;
   assignChat(chatId: string, projectId: string): Promise<void>;
-  sendPrompt(chatId: string, text: string, ai?: AIRequest): Promise<void>;
+  /** Invoke onPersisted after durable prompt creation, before provider generation. Never invoke for pre-persistence failures. */
+  sendPrompt(chatId: string, text: string, ai?: AIRequest, onPersisted?: () => void): Promise<void>;
   savePrompt(promptId: string): Promise<void>;
   addResult(promptId: string, result: string): Promise<void>;
   commit(

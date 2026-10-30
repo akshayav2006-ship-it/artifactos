@@ -183,3 +183,10 @@
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
+
+.search-box button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}

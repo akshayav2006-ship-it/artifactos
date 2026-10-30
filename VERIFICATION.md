@@ -13,6 +13,7 @@ The implemented core passes automated checks. The entire application is not yet 
 - Hosted app loaded in a browser; demo sign-in and project creation worked.
 - Dashboard, project list, notifications, settings, and profile pages rendered.
 - Local workspace project creation worked.
+- Signed-in shared Groq generation, prompt saving, result attachment, and artifact commit creation worked.
 - A live Groq GPT OSS 20B request returned HTTP 200 and a nonempty reply.
 - Convex tests cover ownership, project isolation, response history, policy citations, immutable commits, designated approvers, concurrent reviews, invitation identity, and email failure handling. Provider/email calls are mocked in automated tests.
 
@@ -23,7 +24,8 @@ The implemented core passes automated checks. The entire application is not yet 
 - `/search`, `/assistant`, `/analytics`, and `/knowledge-graph` redirect to the dashboard.
 - Legacy `/api` requests are not backed by the static Vercel deployment; demo login falls back after a 405 response.
 - Hosted Clerk uses development keys; the frontend points to a Convex development deployment.
-- Signed-in shared browser workflow is pending the user's Clerk sign-in. A direct provider smoke test does not establish the complete authenticated UI path.
+- Signed-in shared browser verification passed: selected Groq GPT OSS 20B in the existing verification project, generated a nonempty reply with Groq provenance, saved the prompt, attached a manual result, and created the immutable commit `Groq launch checklist verification`.
+- Live review approval and notification email delivery were not exercised; their permission and workflow behavior is covered by automated tests.
 - Real email delivery and local ChatGPT OAuth were not exercised.
 - The preview recording tool timed out twice. The demo video is a labeled walkthrough assembled from real browser captures, not a continuous recording.
 

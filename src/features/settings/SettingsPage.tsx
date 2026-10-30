@@ -8,8 +8,12 @@ const storageKey = 'artifactos-settings'
 export function SettingsPage({ local, modelName, geminiConfigured = false }: { local?: boolean; modelName?: string; geminiConfigured?: boolean }) {
   const [settings, setSettings] = useState<Settings>(() => { try { return { ...defaults, ...JSON.parse(localStorage.getItem(storageKey) || '{}') } } catch { return defaults } })
   const [saved, setSaved] = useState(false)
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(settings)); setSaved(true); const timer = window.setTimeout(() => setSaved(false), 1600); return () => window.clearTimeout(timer) }, [settings])
-  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => setSettings(current => ({ ...current, [key]: value }))
+  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(settings)) }, [settings])
+  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setSettings(current => ({ ...current, [key]: value }))
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 1600)
+  }
   return <section className="settings-page">
     <header className="settings-header"><div><p className="eyebrow">Settings</p><h2>Make Artifactos work your way</h2><p className="settings-intro">Personalize your workspace, chat behavior, and AI defaults.</p></div><span className={`settings-save ${saved ? 'is-visible' : ''}`}>Saved automatically</span></header>
     <div className="settings-grid">

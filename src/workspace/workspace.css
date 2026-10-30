@@ -1295,8 +1295,8 @@
   padding: 14px;
   border: 1px solid #3d424c;
   border-radius: 12px;
-  background: #262a32;
-  color: #f8fafc;
+  background: #262a32 !important;
+  color: #f8fafc !important;
 }
 .ai-workspace .codex-shell .collaborator-row strong {
   color: #f8fafc;
@@ -1304,8 +1304,14 @@
   font-weight: 700;
 }
 .ai-workspace .codex-shell .collaborator-row small {
-  color: #cbd5e1;
+  color: #cbd5e1 !important;
   font-size: 11px;
+}
+.ai-workspace .codex-shell .collaborator-row > span:not(.account-avatar):not(.role-label) {
+  color: #f8fafc !important;
+}
+.ai-workspace .codex-shell .collaborator-row > span:not(.account-avatar):not(.role-label) small {
+  color: #cbd5e1 !important;
 }
 .ai-workspace .codex-shell .collaborator-row .role-label {
   border-color: #64748b;

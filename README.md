@@ -109,3 +109,13 @@ Every completed reply has **Commit artifact**. The dialog defaults to the chat's
 ## Account welcome page
 
 The login and shared-workspace welcome screens use a two-column introduction and embedded Clerk login form. **Create account** switches to Clerk registration. This replaces the legacy demo-credential login at `/login`; real account access leads to `/workspace`. Available email/password fields, social providers, verification, and recovery follow the configured Clerk instance.
+
+## Everyday workspace controls
+
+Chat drafts recover per account, local/shared workspace, and conversation; new-chat drafts also keep their project context. Drafts clear when the prompt is saved, including when generation later fails. If browser storage is unavailable, keep the tab open and use the draft download/retry controls.
+
+Workspace links retain projects, chats, prompts, and artifacts across reload and browser Back/Forward. Use **Search workspace** or **Cmd/Ctrl+K** to find accessible items. Shared search returns up to 100 results across up to 100 active memberships, with up to 10 matches per type/index per project. **Copy response/result**, **Reuse prompt**, and **Response history → Compare versions** speed up chat work. Model selection and grounding preferences are remembered per account, workspace, and project; credentials stay in session memory.
+
+**Cancel generation** aborts the provider request and records cancellation; late results cannot replace it. Unrelated workspace actions remain available during generation. **Inbox** lists shared invitations and approval requests; artifact lists include **Needs my review**. **Settings** describes the current workspace and session configuration. `/search`, `/notifications`, and `/settings` lead into the live workspace controls.
+
+See [QoL verification](docs/qol-verification.md) for integrated checks, browser evidence, and limits.

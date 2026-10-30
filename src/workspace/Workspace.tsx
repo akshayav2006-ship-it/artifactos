@@ -1,3 +1,4 @@
+import { SettingsPage } from "../features/settings/SettingsPage";
 import { useChatDraft } from "./useChatDraft";
 import WorkspaceSearch from "./WorkspaceSearch";
 import { loadPreference, preferenceKey, savePreference } from "./preferences";
@@ -52,6 +53,8 @@ const icons: Record<string, string> = {
   Prompt: "≡",
   Artifact: "◇",
   Project: "▱",
+  Inbox: "☷",
+  Settings: "⚙",
 };
 export default function Workspace({
   data,
@@ -75,6 +78,7 @@ export default function Workspace({
   }
   const [geminiKey, setGeminiKey] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeIsError, setNoticeIsError] = useState(false);
   const [dismissedError, setDismissedError] = useState<string>();
   const [pending, setPending] = useState<string[]>([]);
   const busy = pending.includes("workspace");
@@ -96,6 +100,7 @@ export default function Workspace({
   const project = data.projects.find((p) => p.id === route.projectId);
   const chat = data.chats.find((c) => c.id === route.chatId);
   const navigate = (next: Route) => {
+    if (next.page !== "Chat" || next.chatId !== route.chatId) window.scrollTo({ top: 0 });
     setRoute(next);
     setSearch("");
     setNotice("");
@@ -105,12 +110,14 @@ export default function Workspace({
     if (operationLocks.current.has(operation)) return false;
     operationLocks.current.add(operation);
     setPending([...operationLocks.current]);
+    setNoticeIsError(false);
     setNotice("");
     try {
       await action();
       if (message) setNotice(message);
       return true;
     } catch (e) {
+      setNoticeIsError(true);
       setNotice(
         e instanceof ConvexError && typeof e.data === "string"
           ? e.data
@@ -174,6 +181,7 @@ export default function Workspace({
     (a) => a.projectId === route.projectId,
   );
   const title =
+    route.page === "Inbox" || route.page === "Settings" ? route.page :
     route.page === "Overview"
       ? "Overview"
       : route.page === "Chat"
@@ -198,7 +206,7 @@ export default function Workspace({
           </button>
         </div>
         <nav className="primary-nav">
-          {(["Overview", "Chat", "Prompt", "Artifact"] as const).map((page) => (
+          {(["Overview", "Chat", "Prompt", "Artifact", "Inbox", "Settings"] as const).map((page) => (
             <button
               key={page}
               title={page === "Chat" ? "New chat" : page}
@@ -346,14 +354,14 @@ export default function Workspace({
           {(notice || (error && error !== dismissedError)) && (
             <div role="status" className="notice">
               <span>{notice || error}</span>
-              <button onClick={() => window.location.reload()}>Reload workspace</button>
-              {local && <button onClick={() => download("Workspace backup", JSON.stringify(data, null, 2))}>Download current data</button>}
+              {(noticeIsError || !notice) && <><button onClick={() => window.location.reload()}>Reload workspace</button>
+              {local && <button onClick={() => download("Workspace backup", JSON.stringify(data, null, 2))}>Download current data</button>}</>}
               <button aria-label="Dismiss" onClick={() => { if (notice) setNotice(""); else setDismissedError(error); }}>
                 ×
               </button>
             </div>
           )}
-          {!!data.approvals?.length && <details className="review-inbox"><summary>Needs my review · {data.approvals.length}</summary>{data.approvals.map((a) => (
+          {!!data.approvals?.length && <details className="review-inbox" open={route.page === "Inbox" || undefined}><summary>Needs my review · {data.approvals.length}</summary>{data.approvals.map((a) => (
             <div className="invitation-banner" key={a.id}>
               <span>
                 <strong>{a.title}</strong> by {a.author} in {a.projectName}{" "}
@@ -400,6 +408,10 @@ export default function Workspace({
             </div>
           ) : (route.projectId && !project) || (route.chatId && !chat) || (route.artifactId && !data.artifacts.some(a => a.id === route.artifactId)) || (route.promptId && !data.prompts.some(p => p.id === route.promptId && p.chatId === route.chatId)) ? (
             <Empty title="Destination unavailable" text="This item is missing or you no longer have access." action="Back to workspace" onClick={() => navigate({ page: 'Overview' })} />
+          ) : route.page === "Settings" ? (
+            <SettingsPage local={local} modelName={ai?.model.name} geminiConfigured={!!geminiKey.trim()} />
+          ) : route.page === "Inbox" ? (
+            <section className="panel"><h1>Notifications and reviews</h1><p>{local ? "Local workspace updates. Sign in to view shared invitations and approval requests." : "Your current invitations and approval requests appear above."}</p>{!data.approvals?.length && !data.incoming.length && <p>No pending invitations or reviews.</p>}<button className="secondary" onClick={() => navigate({ page: "Artifact" })}>Browse artifacts</button></section>
           ) : route.page === "Overview" ? (
             <>
               <div className="heading">

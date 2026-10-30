@@ -93,7 +93,7 @@ export const finish = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const prompt = await ctx.db.get(args.promptId);
-    if (!prompt || prompt.aiVersionId || prompt.generationCancelledAt !== undefined || prompt.status === 'cancelled') return null;
+    if (!prompt || prompt.aiVersionId || prompt.generationCancelledAt !== undefined || prompt.status === 'cancelled' || prompt.status === 'failed') return null;
     if (args.error) {
       if (prompt.status === 'generating') await ctx.db.patch(prompt._id, { status: 'failed', error: args.error });
       return null;

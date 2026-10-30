@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Actions, Data, Route, SearchResult } from '../../shared/workspace';
 export default function WorkspaceSearch({ data, actions, navigate }: { data: Data; actions: Actions; navigate: (route: Route) => void }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(() => new URLSearchParams(window.location.search).get('q') || '');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [status, setStatus] = useState('');
   const input = useRef<HTMLInputElement>(null);

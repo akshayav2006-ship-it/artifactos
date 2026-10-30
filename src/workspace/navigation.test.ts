@@ -4,7 +4,7 @@ import { loadPreference, preferenceKey, savePreference } from './preferences';
 import type { Route } from '../../shared/workspace';
 describe('workspace navigation', () => {
   it('round trips every page and identity through a refreshed URL', () => {
-    for (const page of ['Overview', 'Project', 'Chat', 'Prompt', 'Artifact'] as const) {
+    for (const page of ['Overview', 'Project', 'Chat', 'Prompt', 'Artifact', 'Inbox', 'Settings'] as const) {
       const route: Route = { page, projectId: 'project /&', chatId: 'chat?=', artifactId: 'artifact#', promptId: 'prompt &/?' };
       expect(readRoute(new URL(routeURL(route), 'https://artifactos.test'))).toEqual(route);
     }

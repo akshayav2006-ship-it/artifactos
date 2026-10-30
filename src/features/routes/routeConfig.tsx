@@ -1,4 +1,5 @@
-import { AvailabilityPage, SearchPage, NotificationsPage } from '../app-shell/WorkspacePages'
+import { WorkspaceSearchRedirect } from "./WorkspaceSearchRedirect"
+import { AvailabilityPage } from '../app-shell/WorkspacePages'
 import type { ReactNode } from 'react'
 import App from '../../App'
 import { Navigate } from 'react-router-dom'
@@ -8,7 +9,6 @@ import { LoginPage } from '../auth/LoginPage'
 import { ProtectedRoute } from '../auth/ProtectedRoute'
 import { ProfilePage } from '../profile/ProfilePage'
 import { ProjectWorkspacePage } from '../projects/ProjectWorkspace'
-import { SettingsPage } from '../settings/SettingsPage'
 import { WorkspaceCommandCenter } from '../step4/WorkspaceCommandCenter'
 
 type RouteConfigEntry = {
@@ -49,7 +49,7 @@ export const routeConfig: RouteConfigEntry[] = [
   },
   {
     path: '/search',
-    element: withShell(<SearchPage />),
+    element: <WorkspaceSearchRedirect />,
   },
   {
     path: '/assistant',
@@ -65,11 +65,11 @@ export const routeConfig: RouteConfigEntry[] = [
   },
   {
     path: '/notifications',
-    element: withShell(<NotificationsPage />),
+    element: <Navigate to="/workspace?page=inbox" replace />,
   },
   {
     path: '/settings',
-    element: withShell(<SettingsPage />),
+    element: <Navigate to="/workspace?page=settings" replace />,
   },
   {
     path: '/profile',

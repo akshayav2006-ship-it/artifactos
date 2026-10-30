@@ -49,7 +49,7 @@ export function AppShell({ children }: AppShellProps) {
 
       <div className="main-panel">
         <header className="topbar">
-          <form className="search-box" role="search" onSubmit={event => { event.preventDefault(); if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`) }}>
+          <form className="search-box" role="search" onSubmit={event => { event.preventDefault(); if (query.trim()) navigate(`/workspace?q=${encodeURIComponent(query.trim())}`) }}>
             <span>Search</span>
             <input aria-label="Search workspace" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search saved workspace data..." /><button type="submit">Search</button>
           </form>

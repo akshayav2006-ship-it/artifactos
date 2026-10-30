@@ -312,3 +312,13 @@ test('manual attachments after cancellation cannot admit a late AI result', asyn
   expect(prompt.reply).toBeUndefined();
   expect((await user.query(api.workspace.listResponseVersions, { chatId, paginationOpts: { numItems: 10, cursor: null } })).page.map(v => v.body)).toEqual(['Human replacement']);
 });
+
+test('expired generations cannot be revived by a late provider result', async () => {
+  const { user, chatId } = await setup();
+  const { promptId } = await user.mutation(internal.ai.begin, { chatId, text: 'Slow reply', model: 'gemini-test' });
+  await user.mutation(internal.ai.expire, { promptId });
+  await user.mutation(internal.ai.finish, { promptId, result: 'Late answer', requestedModel: 'gemini-test' });
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  expect(prompt.status).toBe('failed');
+  expect(prompt.reply).toBeUndefined();
+});

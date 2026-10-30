@@ -1,5 +1,10 @@
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
+.settings-page { display: flex; flex-direction: column; gap: 18px; color: #eeeeee; }
+.settings-page .settings-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; height: auto; min-height: 0; border: 0; padding: 0; }
+.settings-page .settings-header h2 { margin: 8px 0; font-size: 24px; line-height: 1.35; }
+.settings-page .settings-caption { color: #bdbdbd; font-size: 12px; }
+.settings-page .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.settings-page .settings-card { border: 1px solid #606060; border-radius: 12px; background: #242424; padding: 22px; min-width: 0; }
+.settings-page .settings-list { padding-left: 20px; color: #cccccc; line-height: 1.7; }
+.settings-page .settings-list li + li { margin-top: 12px; }
+.settings-page a { color: #c9b7ed; line-height: 1.6; }
+@media (max-width: 700px) { .settings-page .settings-grid { grid-template-columns: 1fr; } }

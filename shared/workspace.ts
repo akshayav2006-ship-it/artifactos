@@ -137,7 +137,7 @@ export const emptyData: Data = {
 export type Route = {
   promptId?: string;
   artifactId?: string;
-  page: "Overview" | "Chat" | "Prompt" | "Artifact" | "Project";
+  page: "Overview" | "Chat" | "Prompt" | "Artifact" | "Project" | "Inbox" | "Settings";
   projectId?: string;
   chatId?: string;
 };

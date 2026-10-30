@@ -1,5 +1,5 @@
 import type { Route } from '../../shared/workspace';
-const pages: Route['page'][] = ['Overview', 'Chat', 'Prompt', 'Artifact', 'Project'];
+const pages: Route['page'][] = ['Overview', 'Chat', 'Prompt', 'Artifact', 'Project', 'Inbox', 'Settings'];
 export function readRoute(url: URL): Route {
   const page = pages.find(p => p.toLowerCase() === url.searchParams.get('page')) || (url.pathname === '/chat' ? 'Chat' : 'Overview');
   return { page, promptId: url.searchParams.get('prompt') || undefined, projectId: url.searchParams.get('project') || undefined, chatId: url.searchParams.get('chat') || undefined, artifactId: url.searchParams.get('artifact') || undefined };

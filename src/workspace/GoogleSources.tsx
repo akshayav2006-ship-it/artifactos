@@ -1,3 +1,5 @@
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { GoogleGrounding } from '../../shared/ai';
 import { safeSourceUrl } from '../../shared/ai';
 
@@ -17,21 +19,29 @@ export function GoogleSources({ grounding }: { grounding?: GoogleGrounding }) {
 }
 
 export function GroundedText({ text, grounding }: { text: string; grounding?: GoogleGrounding }) {
-  // Match the provider's segment text rather than treating UTF-8 offsets as JS indices.
+  // Insert citations into the original Markdown before parsing so lists, code,
+  // and emphasis remain one document. Never interpret provider HTML.
   let cursor = 0;
-  const parts = [];
-  for (const [index, support] of (grounding?.supports ?? []).entries()) {
+  let markdown = '';
+  for (const support of grounding?.supports ?? []) {
     const start = text.indexOf(support.text, cursor);
     if (!support.text || start < 0) continue;
     const end = start + support.text.length;
-    parts.push(<span key={index}>{text.slice(cursor, end)}<sup className="source-citations">
-      {support.sourceIndices.map(sourceIndex => {
-        const source = grounding?.sources[sourceIndex];
-        return source && safeSourceUrl(source.url) ? <a key={sourceIndex} href={source.url} title={source.title}
-          target="_blank" rel="noopener noreferrer">[{sourceIndex + 1}]</a> : null;
-      })}
-    </sup></span>);
+    markdown += text.slice(cursor, end);
+    for (const sourceIndex of support.sourceIndices) {
+      const source = grounding?.sources[sourceIndex];
+      if (!source || !safeSourceUrl(source.url)) continue;
+      const url = encodeURI(source.url).replace(/[()<>\\\s]/g, character => encodeURIComponent(character));
+      markdown += ` [\\[${sourceIndex + 1}\\]](<${url}>)`;
+    }
     cursor = end;
   }
-  return <pre>{parts}{text.slice(cursor)}</pre>;
+  markdown += text.slice(cursor);
+  return <div className="markdown-body"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
+    a: ({ href, children }) => safeSourceUrl(href)
+      ? <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+      : <span>{children}</span>,
+    img: ({ alt }) => <span className="markdown-image-label">{alt ? `[Image: ${alt}]` : '[Image]'}</span>,
+    table: ({ children }) => <div className="markdown-table-scroll"><table>{children}</table></div>,
+  }}>{markdown}</Markdown></div>;
 }

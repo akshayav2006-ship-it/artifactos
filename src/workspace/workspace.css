@@ -1216,3 +1216,40 @@
 .policy-citations { margin-top: 12px; font-size: 12px; }
 .policy-citations details { margin: 8px 0; }
 .policy-citations pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Provider replies and response history share the same Markdown rendering. */
+.ai-workspace .markdown-body {
+  min-width: 0;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.ai-workspace .markdown-body > :first-child { margin-top: 0; }
+.ai-workspace .markdown-body > :last-child { margin-bottom: 0; }
+.ai-workspace .markdown-body p { margin: .8em 0; }
+.ai-workspace .markdown-body h1,
+.ai-workspace .markdown-body h2,
+.ai-workspace .markdown-body h3,
+.ai-workspace .markdown-body h4,
+.ai-workspace .markdown-body h5,
+.ai-workspace .markdown-body h6 { margin: 1.3em 0 .55em; line-height: 1.35; color: #f5f5f5; }
+.ai-workspace .markdown-body h1 { font-size: 1.65em; }
+.ai-workspace .markdown-body h2 { font-size: 1.4em; }
+.ai-workspace .markdown-body h3 { font-size: 1.2em; }
+.ai-workspace .markdown-body ul,
+.ai-workspace .markdown-body ol { margin: .65em 0; padding-left: 1.6em; }
+.ai-workspace .markdown-body li { margin: .3em 0; }
+.ai-workspace .markdown-body li > p { margin: .3em 0; }
+.ai-workspace .markdown-body a { color: #b9cbff; text-decoration: underline; text-underline-offset: 3px; }
+.ai-workspace .markdown-body code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .9em; background: #292929; border-radius: 4px; padding: .15em .35em; }
+.ai-workspace .markdown-body pre { max-width: 100%; overflow-x: auto; padding: 14px; margin: 1em 0; background: #131313; border: 1px solid #444; border-radius: 8px; white-space: pre; overflow-wrap: normal; line-height: 1.55; }
+.ai-workspace .markdown-body pre code { padding: 0; background: none; white-space: pre; }
+.ai-workspace .markdown-body blockquote { margin: 1em 0; padding: .1em 1em; border-left: 3px solid #8e79ad; color: #c9c9c9; }
+.ai-workspace .markdown-table-scroll { max-width: 100%; overflow-x: auto; margin: 1em 0; }
+.ai-workspace .markdown-body table { width: 100%; border-collapse: collapse; font-size: inherit; }
+.ai-workspace .markdown-body th,
+.ai-workspace .markdown-body td { padding: 9px 12px; border: 1px solid #555; text-align: left; }
+.ai-workspace .markdown-body th { background: #292929; font-weight: 600; }
+.ai-workspace .markdown-body hr { border: 0; border-top: 1px solid #555; margin: 1.4em 0; }

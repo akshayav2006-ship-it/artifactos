@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import './WorkspaceCommandCenter.css'
 import {
   activityFeed,
@@ -25,6 +26,7 @@ export function WorkspaceCommandCenter(props: WorkspaceCommandCenterProps) {
 function CommandCenter({ initialTab = 'overview' }: WorkspaceCommandCenterProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab)
   const [readNotifications, setReadNotifications] = useState<Set<string>>(new Set())
+  const navigate = useNavigate()
 
   const handleMarkAllRead = () => {
     const allIds = new Set(notifications.map(n => n.id))
@@ -64,21 +66,43 @@ function CommandCenter({ initialTab = 'overview' }: WorkspaceCommandCenterProps)
 
   const renderOverview = () => (
     <div className="panel-stack">
-      <section className="panel-card">
-        <div className="section-header">
+      <section className="metric-section">
+        <div className="section-header compact">
           <div>
-            <p className="eyebrow">Command Center</p>
-            <h3>Workspace overview</h3>
+            <p className="eyebrow">At a glance</p>
+            <h3>Work that needs your attention</h3>
           </div>
+          <span className="updated-label">Updated just now</span>
         </div>
         <div className="stats-grid">
-          {dashboardStats.map((stat) => (
+          {dashboardStats.slice(0, 4).map((stat) => (
             <div key={stat.label} className="stat-card">
               <span>{stat.label}</span>
               <strong>{stat.value}</strong>
               <em>{stat.change}</em>
             </div>
           ))}
+        </div>
+      </section>
+      <div className="dashboard-grid">
+        <section className="dashboard-card review-card">
+          <div className="section-header compact"><div><p className="eyebrow">Review queue</p><h3>Keep releases moving</h3></div><Link to="/artifacts" className="text-link">View all</Link></div>
+          <div className="review-row"><span className="review-icon">⌁</span><div><strong>ERP Backend Discussion</strong><p>Awaiting your review · 2 collaborators</p></div><button type="button" onClick={() => navigate('/artifacts')}>Review</button></div>
+          <div className="review-row"><span className="review-icon rose">✦</span><div><strong>Launch messaging brief</strong><p>Final approval due today</p></div><button type="button" onClick={() => navigate('/artifacts')}>Review</button></div>
+          <div className="review-row"><span className="review-icon blue">◈</span><div><strong>Authentication prompt pack</strong><p>Ready to publish · score 85</p></div><button type="button" onClick={() => navigate('/artifacts')}>Open</button></div>
+        </section>
+        <section className="dashboard-card activity-card">
+          <div className="section-header compact"><div><p className="eyebrow">Recent work</p><h3>Activity across your workspace</h3></div></div>
+          <div className="activity-list">{activityFeed.slice(0, 4).map((entry, index) => <div key={entry.title} className="mini-activity"><span className={`activity-mark mark-${index}`} /><div><strong>{entry.title}</strong><p>{entry.detail}</p></div><time>{entry.time}</time></div>)}</div>
+          <button type="button" className="outline-action" onClick={() => setActiveTab('activity')}>See all activity →</button>
+        </section>
+      </div>
+      <section className="dashboard-card projects-card">
+        <div className="section-header compact"><div><p className="eyebrow">Your projects</p><h3>Jump back into a workspace</h3></div><Link to="/projects" className="text-link">All projects</Link></div>
+        <div className="project-list">
+          <Link to="/projects" className="project-tile"><span className="project-monogram violet">N</span><div><strong>Northstar Product Launch</strong><p>12 artifacts · 4 collaborators</p></div><span>→</span></Link>
+          <Link to="/projects" className="project-tile"><span className="project-monogram teal">A</span><div><strong>Atlas AI Ops</strong><p>8 artifacts · 6 collaborators</p></div><span>→</span></Link>
+          <Link to="/projects" className="project-tile"><span className="project-monogram amber">I</span><div><strong>Identity Vault</strong><p>17 artifacts · 3 collaborators</p></div><span>→</span></Link>
         </div>
       </section>
     </div>
@@ -139,12 +163,13 @@ function CommandCenter({ initialTab = 'overview' }: WorkspaceCommandCenterProps)
     <section className="workspace-command-center">
       <header className="command-header">
         <div>
-          <span className="command-badge">Artifactos Command Center</span>
-          <h2>Search, AI, analytics, and workflow intelligence</h2>
+          <span className="command-badge"><i /> Your workspace</span>
+          <h2>Good morning — make progress<br />on the work that matters.</h2>
+          <p>Capture decisions, ship reviewed artifacts, and keep your team in sync.</p>
         </div>
-        <div className="command-runtime">
-          <span className="status-live">Live</span>
-          <button type="button" className="primary-btn">Open Assistant</button>
+        <div className="hero-actions">
+          <button type="button" className="secondary-btn" onClick={() => navigate('/projects')}>Browse projects</button>
+          <button type="button" className="primary-btn" onClick={() => navigate('/chat')}>Start a chat <span>→</span></button>
         </div>
       </header>
 

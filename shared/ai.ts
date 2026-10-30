@@ -79,6 +79,7 @@ export function googleGrounding(metadata: unknown): GoogleGrounding | undefined 
 }
 
 export const groqModels: AIModel[] = [
+  { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B · Groq (preview)', provider: 'groq' },
   { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B · Groq', provider: 'groq' },
   { id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B · Groq', provider: 'groq' },
 ];

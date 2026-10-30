@@ -160,14 +160,14 @@ test('Google Search tools and source metadata survive response history', async (
   expect(history.page[0].provenance).toBeUndefined();
 });
 
-test('Groq uses server credentials and preserves Groq provenance', async () => {
+test.each(['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b'])('Groq uses server credentials and preserves provenance for %s', async (model) => {
   vi.stubEnv('GROQ_API_KEY', 'server-only-test-key');
   try {
     const { user, chatId, t } = await setup();
-    vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'Groq reply', response: { body: { model: 'openai/gpt-oss-20b' } } } as never);
-    await user.action(api.ai.reply, { chatId, text: 'Hello', model: 'openai/gpt-oss-20b', provider: 'groq' });
+    vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: 'Groq reply', response: { body: { model } } } as never);
+    await user.action(api.ai.reply, { chatId, text: 'Hello', model, provider: 'groq' });
     const rows = await user.query(api.workspace.scope, { chatId, limit: 10 });
-    expect(rows.prompts[0]).toMatchObject({ status: 'complete', replyProvenance: { provider: 'groq', requestedModel: 'openai/gpt-oss-20b' } });
+    expect(rows.prompts[0]).toMatchObject({ status: 'complete', replyProvenance: { provider: 'groq', requestedModel: model } });
     expect(JSON.stringify(await t.run(ctx => ctx.db.query('workPrompts').take(10)))).not.toContain('server-only-test-key');
   } finally { vi.unstubAllEnvs(); }
 });

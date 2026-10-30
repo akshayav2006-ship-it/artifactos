@@ -1,3 +1,4 @@
+import type { DocumentAttachment } from './documents';
 import type { PolicyRow, PolicyImport } from "./policies";
 import type { AIRequest, ModelProvenance } from "./ai";
 export type Role = "owner" | "admin" | "member" | "reviewer" | "viewer";
@@ -44,6 +45,7 @@ export type Prompt = {
   model?: string;
 };
 export type Commit = {
+  attachment?: DocumentAttachment;
   sourceVersionId?: string;
   sourceModel?: ModelProvenance;
   pushed?: boolean;
@@ -59,6 +61,7 @@ export type Commit = {
   createdAt: number;
 };
 export type Artifact = {
+  attachment?: DocumentAttachment;
   requiredApprovals?: number;
   approvers?: { userId: string; name: string; delivery: "queued" | "sent" | "failed" | "not_configured"; decision?: "verified" | "changes_requested"; score?: number; feedback?: string; reviewedAt?: number }[];
   sourceVersionId?: string;
@@ -152,6 +155,7 @@ export type Actions = {
     title: string,
     body: string,
     message: string,
+    attachment?: DocumentAttachment,
   ): Promise<void>;
   selectFinal(commitId: string): Promise<void>;
   push(commitId: string, approverIds?: string[]): Promise<void>;

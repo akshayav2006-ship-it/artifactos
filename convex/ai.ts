@@ -1,3 +1,4 @@
+import { isDocumentRequest } from '../shared/documents';
 import { policyContext, citedPolicies } from '../shared/policies';
 import { v, ConvexError } from 'convex/values';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -84,7 +85,7 @@ export const reply = action({
         if (!available.some(model => model.id === args.model)) throw new Error('Choose a currently free OpenRouter chat model.');
       }
       const google = createGoogleGenerativeAI({ apiKey: args.apiKey });
-      const agent = new Agent(components.agent, { name: 'Artifactos', languageModel: isOpenRouter ? createOpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: env.OPENROUTER_API_KEY, fetch: freeOpenRouterFetch }).chat(args.model) : isGroq ? createGroq({ apiKey: env.GROQ_API_KEY })(args.model) : google(args.model), tools: isGemini && args.googleSearch ? { google_search: google.tools.googleSearch({}) } : undefined, instructions: 'Help the user create useful, accurate work and artifacts.' });
+      const agent = new Agent(components.agent, { name: 'Artifactos', languageModel: isOpenRouter ? createOpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: env.OPENROUTER_API_KEY, fetch: freeOpenRouterFetch }).chat(args.model) : isGroq ? createGroq({ apiKey: env.GROQ_API_KEY })(args.model) : google(args.model), tools: isGemini && args.googleSearch ? { google_search: google.tools.googleSearch({}) } : undefined, instructions: 'Help the user create useful, accurate work and artifacts.' + (isDocumentRequest(args.text) ? ' Write the complete requested document in Markdown. The application converts your reply to a downloadable PDF. Do not claim to attach files or invent download URLs; return the document content itself.' : '') });
       const response = await agent.generateText(ctx, { threadId }, { prompt: args.text.trim() + policyContext(policies), maxRetries: 0, maxOutputTokens: !isGemini ? 2048 : undefined, abortSignal: AbortSignal.timeout(120000) });
       if (!response.text.trim()) throw new Error('Empty reply');
       await ctx.runMutation(internal.ai.finish, { promptId, requestedModel: args.model, result: response.text, resolvedModel: reportedModel(response.response, args.model), grounding: googleGrounding(response.providerMetadata), policyCitations: citedPolicies(response.text, policies) });

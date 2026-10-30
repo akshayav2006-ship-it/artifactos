@@ -42,3 +42,11 @@ Backend used by the frontend: dazzling-bobcat-372 (development).
 - Live SDK request using the configured server key and enforced zero maximum provider pricing succeeded through `openrouter/free`; provider reported `nvidia/nemotron-3.5-lightning:free` with a nonempty response.
 - Catalog snapshot: 16 free chat entries. The picker refreshes from the API and groups Groq, OpenRouter, and Gemini; backend revalidates current free eligibility on every OpenRouter generation.
 - Full browser workflow for OpenRouter and inference on every catalog model were not exercised. The earlier shared Groq browser workflow passed.
+
+## PDF replies, direct commits, and account welcome page
+
+- 75 tests pass; build passes; lint has no errors (four generated-file warnings remain).
+- A real four-page PDF was generated with the app's PDF renderer, then rendered using macOS PDFKit and visually inspected across all pages. Headings, lists, table, code, and footers were readable without clipping.
+- Tests cover PDF request detection, valid PDF output, attachment validation, direct AI-response commit provenance, manual edit provenance, project access, immutable PDF snapshots, submission retention, and local persistence.
+- Document replies show downloadable PDF cards. The commit dialog defaults the project, attaches the PDF only for document requests, or exposes editable text for chat replies, and retains the commit message.
+- The account welcome page uses an embedded Clerk login/registration widget and two-column introduction. Login/signup verification remains governed by the configured Clerk development instance; a new account was not created during testing.

@@ -132,3 +132,21 @@ test('local policy sheets search only their project and retain cited excerpts in
     expect(fetchMock).toHaveBeenCalledTimes(1);
   } finally { vi.unstubAllGlobals(); }
 });
+
+test('local replies commit without manual result attachment and retain PDF bytes', async () => {
+  const { vi } = await import('vitest');
+  let data = structuredClone(emptyData);
+  const actions = localActions(() => data, next => { data = next; });
+  const projectId = await actions.createProject('Documents', '');
+  const chatId = await actions.createChat(projectId, 'Report');
+  const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ text: '# Report\n\nComplete.' }), { headers: { 'Content-Type': 'application/json' } }));
+  try {
+    await actions.sendPrompt(chatId, 'Create a report', { model: { id: 'model', name: 'Model', provider: 'chatgpt' } });
+    const prompt = data.prompts[0];
+    const attachment = { name: 'report.pdf', mimeType: 'application/pdf' as const, data: btoa('%PDF-1.4\n%%EOF') };
+    await actions.commit(chatId, prompt.id, 'Report', prompt.reply!, 'Initial PDF', attachment);
+    expect(data.commits[0]).toMatchObject({ attachment, sourceVersionId: prompt.aiVersionId, sourceModel: { provider: 'chatgpt' } });
+    expect(data.prompts[0].result).toBe('');
+    expect(JSON.parse(JSON.stringify(data)).commits[0].attachment).toEqual(attachment);
+  } finally { request.mockRestore(); }
+});

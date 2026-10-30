@@ -113,3 +113,9 @@
     padding-top: 24px;
   }
 }
+.auth-highlights { padding-left: 20px; color: #e0e7ff; line-height: 1.7; margin: 6px 0 0; }
+.auth-card .auth-switch { display: inline; padding: 0; margin: 0; background: none; box-shadow: none; border-radius: 0; color: #4f46e5; text-decoration: underline; cursor: pointer; font: inherit; font-weight: 600; }
+.auth-card .auth-local { background: #f1f5f9; color: #334155; box-shadow: none; }
+.auth-card .auth-footer { text-align: center; }
+.auth-card { min-width: 0; padding: 28px; }
+.auth-card input { min-width: 0; }

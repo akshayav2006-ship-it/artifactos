@@ -98,3 +98,14 @@ Eligible entries accept text, produce only text, and have explicit zero input/ou
 Catalog checked 2026-10-30: 16 free OpenRouter chat entries (including the free router), three Groq chat choices, and eight Gemini free-tier-eligible presets. The Gemini list follows Google's published pricing; API key access and quotas depend on the Google account, and using a billed key or optional Google Search may incur charges. Custom Gemini IDs remain available.
 
 Sources: [OpenRouter models API](https://openrouter.ai/api/v1/models), [free model variants](https://openrouter.ai/docs/guides/routing/model-variants/free), [provider pricing filters](https://openrouter.ai/docs/guides/routing/provider-selection), [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), and [Groq models](https://console.groq.com/docs/models).
+
+
+## PDF replies and direct commits
+
+Ask chat to create a document, report, or PDF. The app formats the model's reply into a downloadable PDF card. PDF creation runs in the browser with bundled fonts. Supported formatting includes headings, emphasis, lists, tables, code, and links. Remote images and raw HTML are excluded. PDF attachments are limited to 550 KB and stored with the immutable commit snapshot; document content remains in the original response history.
+
+Every completed reply has **Commit artifact**. The dialog defaults to the chat's project, or lets you select one for an unassigned chat. Document replies attach the PDF only. Text replies prefill an editable text attachment and offer a formatted preview. Enter the artifact name and commit message, then create the commit; no separate Attach result step is required. Unchanged replies retain their AI source version and model attribution. Edited text becomes a contributor revision. Submit the selected final commit through the existing approver flow.
+
+## Account welcome page
+
+The login and shared-workspace welcome screens use a two-column introduction and embedded Clerk login form. **Create account** switches to Clerk registration. This replaces the legacy demo-credential login at `/login`; real account access leads to `/workspace`. Available email/password fields, social providers, verification, and recovery follow the configured Clerk instance.

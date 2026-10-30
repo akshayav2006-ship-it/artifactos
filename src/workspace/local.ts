@@ -1,3 +1,4 @@
+import { validateAttachment } from '../../shared/documents';
 import { policyContext, citedPolicies, validatePolicyImport } from "../../shared/policies";
 import { localAI } from "./aiClient";
 import type { AIReply, ChatMessage } from "../../shared/ai";
@@ -256,7 +257,7 @@ export function localActions(
         delete p.error;
       });
     },
-    async commit(chatId, promptId, title, body, message) {
+    async commit(chatId, promptId, title, body, message, attachment) {
       update((d) => {
         const chat = d.chats.find((c) => c.id === chatId);
         if (!chat) throw new Error("Chat not found.");
@@ -265,10 +266,17 @@ export function localActions(
         const prompt = d.prompts.find((p) => p.id === promptId && p.chatId === chatId);
         if (!prompt)
           throw new Error("Source prompt does not belong to this chat.");
+        validateAttachment(attachment);
         preserveResult(d, prompt);
+        const matchesReply = !!prompt.reply && body.trim() === prompt.reply.trim();
+        const matchesResult = !!prompt.result && body.trim() === prompt.result.trim();
+        const sourceVersionId = matchesReply && prompt.aiVersionId ? prompt.aiVersionId : matchesResult ? prompt.currentVersionId : id();
+        if (!matchesReply && !matchesResult) d.responseVersions.unshift({ id: sourceVersionId!, chatId, promptId, authorId: "local", author: "You", body, source: "manual", createdAt: Date.now() });
+        prompt.saved = true;
         d.commits.unshift({
-          sourceVersionId: prompt.currentVersionId,
-          sourceModel: prompt.provenance,
+          attachment,
+          sourceVersionId,
+          sourceModel: matchesReply ? prompt.replyProvenance : matchesResult ? prompt.provenance : undefined,
           id: id(),
           chatId,
           projectId: chat.projectId,

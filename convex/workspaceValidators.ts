@@ -70,7 +70,9 @@ export const promptFields = {
   error: v.optional(v.string()),
   model: v.optional(v.string()),
 };
+export const documentAttachment = v.object({ name: v.string(), mimeType: v.literal("application/pdf"), data: v.string() });
 export const commitFields = {
+  attachment: v.optional(documentAttachment),
   sourceVersionId: v.optional(v.id("workResponseVersions")),
   sourceModel: v.optional(modelProvenance),
   chatId: v.id("workChats"),

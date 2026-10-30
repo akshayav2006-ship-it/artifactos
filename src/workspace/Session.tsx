@@ -1,8 +1,8 @@
+import { AuthLanding } from '../features/auth/AuthLanding';
 import { Component, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ClerkProvider,
-  SignInButton,
   UserButton,
   useAuth,
   useUser,
@@ -156,23 +156,7 @@ function Connected({
         <button onClick={leave}>Return to local workspace</button>
       </div>
     );
-  if (!user)
-    return (
-      <div className="session-message">
-        <span className="chat-mark">✳</span>
-        <h1>Your team’s work, together.</h1>
-        <p>
-          Sign in to collaborate, invite teammates, and review project
-          artifacts.
-        </p>
-        <SignInButton mode="modal">
-          <button className="primary">Sign in</button>
-        </SignInButton>
-        <button className="subtle" onClick={leave}>
-          Continue locally
-        </button>
-      </div>
-    );
+  if (!user) return <AuthLanding continueLocally={leave} />;
   if (!isAuthenticated)
     return (
       <div className="session-message">
@@ -325,13 +309,14 @@ function Remote({
     addResult: async (promptId, value) => {
       await result({ promptId: promptId as Id<"workPrompts">, result: value });
     },
-    commit: async (chatId, promptId, title, body, message) => {
+    commit: async (chatId, promptId, title, body, message, attachment) => {
       await commit({
         chatId: chatId as Id<"workChats">,
         promptId: promptId as Id<"workPrompts">,
         title,
         body,
         message,
+        attachment,
       });
     },
     selectFinal: async (commitId) => {

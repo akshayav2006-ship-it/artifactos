@@ -1,3 +1,5 @@
+import { documentAttachment } from './workspaceValidators';
+import { validateAttachment } from '../shared/documents';
 import { assignApprovers, approverViews } from "./approvals";
 import { v } from "convex/values";
 import { createThread, saveMessage } from "@convex-dev/agent";
@@ -263,6 +265,7 @@ export const commit = mutation({
     title: v.string(),
     body: v.string(),
     message: v.string(),
+    attachment: v.optional(documentAttachment),
   },
   returns: v.id("workCommits"),
   handler: async (ctx, args) => {
@@ -272,17 +275,29 @@ export const commit = mutation({
     const prompt = await ctx.db.get(args.promptId);
     if (!prompt || prompt.chatId !== chat._id)
       throw new Error("The source prompt must belong to this chat.");
-    const sourceVersionId = await preserveResult(ctx, prompt);
+    validateAttachment(args.attachment);
+    const body = text(args.body);
+    const matchesReply = !!prompt.reply && body === prompt.reply.trim();
+    const matchesResult = !!prompt.result && body === prompt.result.trim();
+    const sourceModel = matchesReply ? prompt.replyProvenance : matchesResult ? prompt.provenance : undefined;
+    const sourceVersionId = matchesReply && prompt.aiVersionId ? prompt.aiVersionId
+      : matchesResult ? await preserveResult(ctx, prompt)
+      : await ctx.db.insert("workResponseVersions", {
+        chatId: chat._id, promptId: prompt._id, authorId: user._id, author: user.name,
+        body, source: "manual", createdAt: Date.now(),
+      });
+    await ctx.db.patch(prompt._id, { saved: true });
     return await ctx.db.insert("workCommits", {
       sourceVersionId,
-      sourceModel: prompt.provenance,
+      sourceModel,
+      attachment: args.attachment,
       chatId: chat._id,
       projectId: chat.projectId,
       promptId: prompt._id,
       authorId: user._id,
       author: user.name,
       title: text(args.title, 120),
-      body: text(args.body),
+      body,
       message: text(args.message, 500),
       createdAt: Date.now(),
     });

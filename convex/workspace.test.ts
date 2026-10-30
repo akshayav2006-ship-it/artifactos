@@ -573,3 +573,14 @@ describe("submission approval requests", () => {
     expect(await s.t.query(internal.approvals.getDelivery, { requestId: request._id })).toBeNull();
   });
 });
+
+test('PDF bytes remain attached to the submitted immutable artifact snapshot', async () => {
+  const s = await setup();
+  const attachment = { name: 'report.pdf', mimeType: 'application/pdf' as const, data: btoa('%PDF-1.4\n%%EOF') };
+  const commitId = await s.member.mutation(api.workspace.commit, { chatId: s.chatId, promptId: s.promptId, title: 'Report PDF', body: 'Document source', message: 'PDF snapshot', attachment });
+  await s.member.mutation(api.workspace.selectFinal, { commitId });
+  await s.member.mutation(api.workspace.push, { commitId, approverIds: [s.ownerId] });
+  const scope = await s.member.query(api.workspace.scope, { projectId: s.projectId, limit: 100 });
+  expect(scope.artifacts.find(a => a.commitId === commitId)?.attachment).toEqual(attachment);
+  await expect(s.outsider.mutation(api.workspace.commit, { chatId: s.chatId, promptId: s.promptId, title: 'Report', body: 'Source', message: 'No access', attachment })).rejects.toThrow('access');
+});

@@ -229,3 +229,25 @@ test('OpenRouter checks ownership before catalog or provider requests', async ()
   await expect(outsider.action(api.ai.reply, { chatId, text: 'Hello', model: 'test/model:free', provider: 'openrouter' })).rejects.toThrow('private');
   expect(fetch).not.toHaveBeenCalled();
 });
+
+test('AI replies commit directly with immutable PDF attachments and model provenance', async () => {
+  const { user, chatId } = await setup();
+  const projectId = await user.mutation(api.projects.create, { name: 'PDF commits', description: '' });
+  await user.mutation(api.workspace.assignChat, { chatId, projectId });
+  const markdown = '# Project report\n\n**Findings**\n\n- Complete';
+  vi.spyOn(Agent.prototype, 'generateText').mockResolvedValue({ text: markdown } as never);
+  await user.action(api.ai.reply, { chatId, text: 'Create a project report', model: 'gemini-2.5-flash', apiKey: 'test' });
+  const prompt = (await user.query(api.workspace.scope, { chatId, limit: 10 })).prompts[0];
+  const attachment = { name: 'report.pdf', mimeType: 'application/pdf' as const, data: btoa('%PDF-1.4\n%%EOF') };
+  const commitId = await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Report', body: markdown, message: 'Initial report', attachment });
+  let scope = await user.query(api.workspace.scope, { chatId, limit: 10 });
+  expect(scope.commits[0]).toMatchObject({ attachment, sourceVersionId: prompt.aiVersionId, sourceModel: { provider: 'gemini' } });
+  expect(scope.prompts[0]).toMatchObject({ result: '', saved: true });
+  await user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Edited text', body: 'My revised report', message: 'Edit' });
+  scope = await user.query(api.workspace.scope, { chatId, limit: 10 });
+  const edited = scope.commits.find(c => c.title === 'Edited text')!;
+  expect(edited.sourceModel).toBeUndefined();
+  expect(edited.sourceVersionId).not.toBe(prompt.aiVersionId);
+  expect(scope.commits.find(c => c.id === commitId)?.attachment).toEqual(attachment);
+  await expect(user.mutation(api.workspace.commit, { chatId, promptId: prompt.id, title: 'Invalid', body: markdown, message: 'Invalid file', attachment: { ...attachment, data: 'not-pdf' } })).rejects.toThrow('PDF attachment');
+});

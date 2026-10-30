@@ -1,3 +1,6 @@
+import DocumentReply, { AttachmentCard } from './DocumentReply';
+import { createPdfAttachment } from './pdfDocument';
+import { isDocumentRequest } from '../../shared/documents';
 import PolicySheets, { PolicySources } from "./PolicySheets";
 import { GoogleSources, GroundedText } from './GoogleSources';
 import AIControls from "./AIControls";
@@ -1210,13 +1213,8 @@ function ArtifactList({
                   <small>{date(p.reviewedAt!)}</small>
                 </div>
               ))}
-              <pre className="artifact-body">{a.body}</pre>
-              <button
-                className="subtle"
-                onClick={() => download(a.title, a.body)}
-              >
-                Download artifact ↓
-              </button>
+              {a.attachment ? <AttachmentCard attachment={a.attachment} /> : <GroundedText text={a.body} grounding={a.sourceModel?.grounding} />}
+              {!a.attachment && <button className="subtle" onClick={() => download(a.title, a.body)}>Download artifact ↓</button>}
               {a.score !== undefined && (
                 <div className="review-record">
                   <strong>Trust score {a.score}/100</strong>
@@ -1342,6 +1340,8 @@ function ChatView({
   const [text, setText] = useState("");
   const [policySelection, setPolicySelection] = useState<{ projectId: string; ids: string[] }>({ projectId: "", ids: [] });
   const [commitPrompt, setCommitPrompt] = useState<Prompt | null>(null);
+  const [commitBody, setCommitBody] = useState("");
+  const [commitAsPdf, setCommitAsPdf] = useState(false);
   const [resultPrompt, setResultPrompt] = useState<Prompt | null>(null);
   const [showCommits, setShowCommits] = useState(true);
   const prompts = data.prompts
@@ -1462,7 +1462,7 @@ function ChatView({
                 {p.reply && (
                   <div className="result-message">
                     <div className="message-meta"><span>✳</span><strong>{p.replyProvenance?.requestedModel || "AI reply"}</strong></div>
-                    <GroundedText text={p.reply} grounding={p.replyProvenance?.grounding} />
+                    {isDocumentRequest(p.text) ? <DocumentReply text={p.reply} prompt={p.text} /> : <GroundedText text={p.reply} grounding={p.replyProvenance?.grounding} />}
                     {p.replyProvenance && <ModelDetails model={p.replyProvenance} />}
                   </div>
                 )}
@@ -1521,12 +1521,12 @@ function ChatView({
                     </button>
                     <button
                       className="secondary"
-                      disabled={busy || !project || !p.result}
-                      onClick={() => setCommitPrompt(p)}
+                      disabled={busy || !(p.reply || p.result)}
+                      onClick={() => { setCommitBody(p.reply || p.result); setCommitAsPdf(isDocumentRequest(p.text)); setCommitPrompt(p); }}
                     >
                       ◇ Commit artifact
                     </button>
-                    {!project ? <span>Choose a project to commit.</span> : !p.result && <span>Attach a result before committing.</span>}
+                    {!project && <span>Choose a project in the commit dialog.</span>}
                   </div>
                 )}
               </article>
@@ -1662,12 +1662,16 @@ function ChatView({
               e.preventDefault();
               const f = new FormData(e.currentTarget);
               void run(async () => {
+                if (!project) throw new Error("Choose a project before committing.");
+                if (!chat!.projectId) await actions.assignChat(chat!.id, project.id);
+                const attachment = commitAsPdf ? await createPdfAttachment(commitBody, commitPrompt.text) : undefined;
                 await actions.commit(
                   chat!.id,
                   commitPrompt.id,
                   String(f.get("title")),
-                  String(f.get("body")),
+                  commitBody,
                   String(f.get("message")),
+                  attachment,
                 );
                 setCommitPrompt(null);
                 setShowCommits(true);
@@ -1678,26 +1682,28 @@ function ChatView({
               A commit is a fixed snapshot. Create as many as you need; only
               the selected final version can be submitted to the artifact library.
             </p>
+            <label>Project
+              <select aria-label="Commit project" value={project?.id || ""} disabled={!!chat?.projectId} onChange={e => setProjectId(e.target.value)} required>
+                <option value="">Choose a project</option>
+                {data.projects.filter(p => ["owner", "admin", "member"].includes(p.role)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
             <label>
               Artifact name
               <input
                 autoFocus
+                defaultValue={commitPrompt.text.slice(0,120)}
                 name="title"
                 required
                 maxLength={120}
                 placeholder="e.g. Research summary"
               />
             </label>
-            <label>
-              Content
-              <textarea
-                name="body"
-                defaultValue={commitPrompt.result}
-                required
-                rows={8}
-                maxLength={12000}
-              />
-            </label>
+            {commitAsPdf ? <section aria-label="PDF attachment"><DocumentReply text={commitBody} prompt={commitPrompt.text} /><p className="muted">Only this PDF will be attached to the commit.</p></section> : <label>
+              Text attachment · edit before committing
+              <textarea name="body" value={commitBody} onChange={e => setCommitBody(e.target.value)} required rows={8} maxLength={12000} />
+            </label>}
+            {!commitAsPdf && <details><summary>Formatted preview</summary><GroundedText text={commitBody} /></details>}
             <label>
               Commit message
               <input
@@ -1707,8 +1713,8 @@ function ChatView({
                 placeholder="What does this version contain?"
               />
             </label>
-            <button className="primary" disabled={busy}>
-              Create commit
+            <button className="primary" disabled={busy || !project || !commitBody.trim()}>
+              {busy ? "Creating commit…" : "Create commit"}
             </button>
           </form>
         </Modal>
@@ -1752,7 +1758,7 @@ function CommitCard({
         <summary>View snapshot · {commit.id.slice(-7)}</summary>
         {commit.sourceVersionId && <p>Source response · {commit.sourceVersionId.slice(-7)}</p>}
         {commit.sourceModel && <><p>Source model</p><ModelDetails model={commit.sourceModel} /></>}
-        <GroundedText text={commit.body} grounding={commit.sourceModel?.grounding} />
+        {commit.attachment ? <AttachmentCard attachment={commit.attachment} /> : <GroundedText text={commit.body} grounding={commit.sourceModel?.grounding} />}
       </details>
       {isFinal && <span className="final-version-label">✓ Final version</span>}
       {canWrite && !isFinal && (
